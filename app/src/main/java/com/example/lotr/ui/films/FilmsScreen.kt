@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -27,6 +27,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
 import androidx.tv.material3.Button
@@ -87,6 +90,9 @@ fun FilmsScreen(
 
 @Composable
 private fun NoUsbFolderSelected(onSelectFolder: () -> Unit) {
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.Center,
@@ -98,7 +104,7 @@ private fun NoUsbFolderSelected(onSelectFolder: () -> Unit) {
             style = MaterialTheme.typography.titleMedium,
         )
         Spacer(Modifier.height(24.dp))
-        Button(onClick = onSelectFolder) {
+        Button(onClick = onSelectFolder, modifier = Modifier.focusRequester(focusRequester)) {
             Text("Select USB folder")
         }
     }
@@ -106,12 +112,20 @@ private fun NoUsbFolderSelected(onSelectFolder: () -> Unit) {
 
 @Composable
 private fun FilmPosterList(films: List<Film>, selectedFilm: Film, onSelect: (Film) -> Unit) {
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        items(films) { film ->
+    val firstItemFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { firstItemFocusRequester.requestFocus() }
+
+    LazyColumn(
+        modifier = Modifier.focusRestorer(firstItemFocusRequester),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        itemsIndexed(films) { index, film ->
             val isSelected = film.id == selectedFilm.id
             Card(
                 onClick = { onSelect(film) },
-                modifier = Modifier.size(width = 220.dp, height = 130.dp),
+                modifier = Modifier
+                    .size(width = 220.dp, height = 130.dp)
+                    .let { if (index == 0) it.focusRequester(firstItemFocusRequester) else it },
                 colors = CardDefaults.colors(
                     containerColor = if (isSelected) {
                         MaterialTheme.colorScheme.surface
