@@ -3,6 +3,7 @@ package com.example.lotr
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,15 +30,22 @@ class MainActivity : ComponentActivity() {
             LotrTheme {
                 val storageRepository = remember { StorageRepository(applicationContext) }
                 val playbackPositionRepository = remember { PlaybackPositionRepository(applicationContext) }
-                var screen by remember { mutableStateOf<Screen>(Screen.Home) }
+                var backStack by remember { mutableStateOf(listOf<Screen>(Screen.Home)) }
 
-                // TODO(PR7): replace with a proper sealed-class nav state machine with back-stack
-                // handling (hardware back button) once all screens exist.
-                when (val current = screen) {
-                    Screen.Home -> HomeScreen(onOpenFilms = { screen = Screen.Films })
+                // Kiosk-simple back-stack: the remote's Back button pops one screen until Home,
+                // then falls through to the system default (exits the app). No Navigation-Compose
+                // needed for a 3-screen graph with no deep links.
+                BackHandler(enabled = backStack.size > 1) {
+                    backStack = backStack.dropLast(1)
+                }
+
+                when (val current = backStack.last()) {
+                    Screen.Home -> HomeScreen(
+                        onOpenFilms = { backStack = backStack + Screen.Films },
+                    )
                     Screen.Films -> FilmsScreen(
                         storageRepository = storageRepository,
-                        onPlay = { film, uri -> screen = Screen.Player(film, uri) },
+                        onPlay = { film, uri -> backStack = backStack + Screen.Player(film, uri) },
                     )
                     is Screen.Player -> PlayerScreen(
                         film = current.film,
