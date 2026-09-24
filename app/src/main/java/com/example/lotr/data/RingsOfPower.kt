@@ -2,6 +2,7 @@ package com.example.lotr.data
 
 /** Metadata and filename conventions for The Rings of Power episodes on the drive. */
 object RingsOfPower {
+    const val SERIES_ID = "rings_of_power"
     const val TITLE = "The Rings of Power"
     const val SYNOPSIS = "Thousands of years before the Fellowship, the great rings are forged in the " +
         "Second Age, and an old shadow stirs again in Middle-earth."
@@ -24,12 +25,14 @@ object RingsOfPower {
         RegexOption.IGNORE_CASE,
     )
 
+    fun isSeries(path: String): Boolean = SERIES_NAME.containsMatchIn(path)
+
     /**
      * Season and episode for a file that belongs to the series: its path (folder or name) says
      * "Rings of Power" and its name has an `S01E03`-style code. Null for anything else.
      */
     fun seasonAndEpisode(path: String, fileName: String): Pair<Int, Int>? {
-        if (!SERIES_NAME.containsMatchIn(path)) return null
+        if (!isSeries(path)) return null
         val match = EPISODE_CODE.find(fileName) ?: return null
         return match.groupValues[1].toInt() to match.groupValues[2].toInt()
     }

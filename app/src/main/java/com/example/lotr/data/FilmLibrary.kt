@@ -18,6 +18,7 @@ data class FilmScan(
     val isCustom: Boolean,
     val files: Map<String, FilmFile>,
     val episodes: List<Episode> = emptyList(),
+    val trailers: Map<String, FilmFile> = emptyMap(),
 )
 
 /**
@@ -49,6 +50,7 @@ class FilmLibrary(private val storage: StorageRepository, scope: CoroutineScope)
                     isCustom = custom != null,
                     files = contents?.films.orEmpty(),
                     episodes = contents?.episodes.orEmpty(),
+                    trailers = contents?.trailers.orEmpty(),
                 )
             }
             .stateIn(scope, SharingStarted.Eagerly, null)
