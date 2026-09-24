@@ -65,4 +65,24 @@ class RingsOfPowerTest {
     fun `teasers fall back to the season premise`() {
         assertEquals(RingsOfPower.season(3)!!.premise, RingsOfPower.episodeTeaser(3, 1))
     }
+
+    @Test
+    fun `lists every catalog episode, with files where found, plus extras beyond the catalog`() {
+        val found = mapOf((1 to 3) to "s1e3.mkv", (4 to 1) to "s4e1.mkv")
+        val list = RingsOfPower.withCatalog(found)
+
+        assertEquals(8 + 8 + 8 + 1, list.size)
+        assertEquals(Triple(1, 1, null), list.first())
+        assertEquals(Triple(1, 3, "s1e3.mkv"), list[2])
+        assertEquals(Triple(4, 1, "s4e1.mkv"), list.last())
+        assertEquals(list.sortedWith(compareBy({ it.first }, { it.second })), list)
+    }
+
+    @Test
+    fun `unaired season three episodes carry their release dates`() {
+        assertEquals("11 Nov 2026", RingsOfPower.arrives(3, 1))
+        assertEquals("18 Nov 2026", RingsOfPower.arrives(3, 6))
+        assertEquals("25 Nov 2026", RingsOfPower.arrives(3, 8))
+        assertNull(RingsOfPower.arrives(1, 1))
+    }
 }
