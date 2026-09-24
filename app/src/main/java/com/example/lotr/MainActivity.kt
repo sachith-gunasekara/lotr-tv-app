@@ -62,6 +62,7 @@ class MainActivity : ComponentActivity() {
                         Screen.Home -> HomeScreen(
                             filmLibrary = filmLibrary,
                             playbackPositionRepository = playbackPositionRepository,
+                            thumbnails = thumbnails,
                             onOpenFilms = { backStack = backStack + Screen.Library },
                             onPlay = { watchable, uri -> backStack = backStack + Screen.Player(watchable, uri) },
                         )

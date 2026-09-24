@@ -24,29 +24,29 @@ class ThumbnailRepository(private val context: Context) {
     private val cacheDir by lazy { File(context.cacheDir, "thumbnails").apply { mkdirs() } }
 
     /** A representative frame from about [fraction] of the way in, or null if it can't be decoded. */
-    suspend fun frame(file: FilmFile, fraction: Float = 0.2f): Bitmap? = withContext(Dispatchers.IO) {
+    suspend fun frame(file: FilmFile, fraction: Float = 0.2f, maxWidth: Int = 1280): Bitmap? = withContext(Dispatchers.IO) {
         val source = file.uri.path?.let(::File) ?: return@withContext null
-        val key = "${source.path.hashCode()}_${source.length()}_${source.lastModified()}_${(fraction * 100).toInt()}"
+        val key = "${source.path.hashCode()}_${source.length()}_${source.lastModified()}_${(fraction * 100).toInt()}_$maxWidth"
         memory.get(key)?.let { return@withContext it }
 
         val cached = File(cacheDir, "$key.jpg")
         val bitmap = if (cached.exists()) {
             BitmapFactory.decodeFile(cached.path)
         } else {
-            extractionLock.withLock { extract(source, fraction) }
+            extractionLock.withLock { extract(source, fraction, maxWidth) }
                 ?.also { bmp -> cached.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 85, it) } }
         }
         bitmap?.also { memory.put(key, it) }
     }
 
-    private fun extract(source: File, fraction: Float): Bitmap? {
+    private fun extract(source: File, fraction: Float, maxWidth: Int): Bitmap? {
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(source.path)
             val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
             val atUs = (durationMs * fraction).toLong() * 1000
             if (Build.VERSION.SDK_INT >= 27) {
-                retriever.getScaledFrameAtTime(atUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 1280, 720)
+                retriever.getScaledFrameAtTime(atUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, maxWidth, maxWidth * 9 / 16)
             } else {
                 retriever.getFrameAtTime(atUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
             }

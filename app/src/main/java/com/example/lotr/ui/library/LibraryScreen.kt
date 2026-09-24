@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -278,7 +279,8 @@ private fun WatchableCard(
     modifier: Modifier = Modifier,
     art: @Composable () -> Unit,
 ) {
-    val progress by playbackPositionRepository.progress(watchable.id).collectAsState(initial = WatchProgress(0, 0))
+    val progress by remember(watchable.id) { playbackPositionRepository.progress(watchable.id) }
+        .collectAsState(initial = WatchProgress(0, 0))
     var focused by remember { mutableStateOf(false) }
     WarmCard(
         onClick = { file?.let { onPlay(watchable, it.uri) } },
@@ -413,7 +415,10 @@ private fun DetailsPanel(
     playbackPositionRepository: PlaybackPositionRepository,
     modifier: Modifier = Modifier,
 ) {
-    val progress by playbackPositionRepository.progress(watchable.id).collectAsState(initial = WatchProgress(0, 0))
+    // key(): fresh state per title, so the previous title's resume point never flashes here.
+    val progress = key(watchable.id) {
+        remember { playbackPositionRepository.progress(watchable.id) }.collectAsState(initial = WatchProgress(0, 0)).value
+    }
     Column(modifier.width(820.dp)) {
         Text(
             text = when (watchable) {

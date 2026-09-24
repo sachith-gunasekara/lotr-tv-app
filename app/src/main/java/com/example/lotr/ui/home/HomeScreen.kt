@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
@@ -35,6 +36,10 @@ import com.example.lotr.data.FilmLibrary
 import com.example.lotr.data.FilmRepository
 import com.example.lotr.data.FilmScan
 import com.example.lotr.data.PlaybackPositionRepository
+import com.example.lotr.data.RingsOfPower
+import com.example.lotr.data.ThumbnailRepository
+import com.example.lotr.data.WatchProgress
+import com.example.lotr.data.model.Episode
 import com.example.lotr.data.model.Film
 import com.example.lotr.data.model.Watchable
 import com.example.lotr.ui.components.lotrBackground
@@ -49,7 +54,7 @@ import java.util.Date
 import java.util.Locale
 
 private val sections = listOf(
-    Section("The Films", "The trilogy", R.drawable.ic_movie, TileEarth, available = true),
+    Section("The Films", "Trilogy & series", R.drawable.ic_movie, TileEarth, available = true, art = R.drawable.backdrop_return_of_the_king),
     Section("Appendices", "Behind the scenes", R.drawable.ic_videocam, TileRiver, available = false),
     Section("The Vault", "Maps & artwork", R.drawable.ic_explore, TileMoss, available = false),
     Section("Reading", "Letters & languages", R.drawable.ic_menu_book, TileEmber, available = false),
@@ -60,6 +65,7 @@ private val sections = listOf(
 fun HomeScreen(
     filmLibrary: FilmLibrary,
     playbackPositionRepository: PlaybackPositionRepository,
+    thumbnails: ThumbnailRepository,
     onOpenFilms: () -> Unit,
     onPlay: (Watchable, Uri) -> Unit,
     modifier: Modifier = Modifier,
@@ -67,6 +73,20 @@ fun HomeScreen(
     val scan by filmLibrary.scan.collectAsState()
     val hasPermission by filmLibrary.hasPermission.collectAsState()
     val files = scan?.files.orEmpty()
+
+    // The banner features whatever was watched last (film or episode), else the first film.
+    val lastWatchedId by playbackPositionRepository.lastWatchedId.collectAsState(initial = null)
+    val featured: Watchable = (FilmRepository.films + scan?.episodes.orEmpty())
+        .firstOrNull { it.id == lastWatchedId } ?: FilmRepository.films.first()
+    val featuredFile = when (featured) {
+        is Film -> files[featured.id]
+        is Episode -> featured.file
+    }
+    val trailer = scan?.trailers?.get(if (featured is Episode) RingsOfPower.SERIES_ID else featured.id)
+    // key(): fresh state per title, so the old title's resume point never shows under the new one.
+    val progress = key(featured.id) {
+        remember { playbackPositionRepository.progress(featured.id) }.collectAsState(initial = WatchProgress(0, 0)).value
+    }
 
     val heroFocus = remember { FocusRequester() }
     val filmsTileFocus = remember { FocusRequester() }
@@ -79,35 +99,36 @@ fun HomeScreen(
         modifier = modifier
             .fillMaxSize()
             .lotrBackground()
-            .padding(horizontal = 48.dp, vertical = 24.dp),
+            .padding(horizontal = 48.dp, vertical = 20.dp),
     ) {
         TopBar()
-        Spacer(Modifier.height(16.dp))
-        HeroCarousel(
-            films = FilmRepository.films,
-            files = files,
-            playbackPositionRepository = playbackPositionRepository,
-            onActivate = { film -> files[film.id]?.let { onPlay(film, it.uri) } ?: onOpenFilms() },
+        Spacer(Modifier.height(12.dp))
+        HeroBanner(
+            watchable = featured,
+            file = featuredFile,
+            trailer = trailer,
+            progress = progress,
+            thumbnails = thumbnails,
+            onActivate = { featuredFile?.let { onPlay(featured, it.uri) } ?: onOpenFilms() },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(250.dp)
+                .height(300.dp)
                 .focusRequester(heroFocus)
                 // Only The Films is live, so Down goes there rather than to the nearest tile.
-                // (Carousel manages its own focus, so focusProperties routing doesn't apply.)
                 .onPreviewKeyEvent { event ->
                     if (event.key != Key.DirectionDown) return@onPreviewKeyEvent false
                     if (event.type == KeyEventType.KeyDown) filmsTileFocus.requestFocus()
                     true
                 },
         )
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(20.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             sections.forEach { section ->
                 SectionTile(
                     section = section,
                     onClick = { if (section.available) onOpenFilms() },
                     modifier = Modifier
-                        .size(width = 160.dp, height = 128.dp)
+                        .size(width = 160.dp, height = 112.dp)
                         .let { if (section.available) it.focusRequester(filmsTileFocus) else it },
                 )
             }

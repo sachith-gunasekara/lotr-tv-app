@@ -14,6 +14,8 @@ data class Film(
     val runtime: Duration,
     val extendedRuntime: Duration,
     val filenameKeywords: List<String>,
+    /** Where in the film its backdrop still was taken, so a preview can start on that frame. */
+    val backdropAtMs: Long,
 ) : Watchable {
     fun runtimeFor(tags: ReleaseTags?): Duration = if (tags?.extended == true) extendedRuntime else runtime
 

@@ -19,8 +19,15 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/** What a scan found: film files by film id, and series episodes in order. */
-data class LibraryContents(val films: Map<String, FilmFile>, val episodes: List<Episode>)
+/**
+ * What a scan found: film files by film id, series episodes in order, and trailers keyed by film
+ * id or [RingsOfPower.SERIES_ID] (any video with "trailer" in its name).
+ */
+data class LibraryContents(
+    val films: Map<String, FilmFile>,
+    val episodes: List<Episode>,
+    val trailers: Map<String, FilmFile> = emptyMap(),
+)
 
 /** A mounted storage volume's root directory, e.g. internal storage or the USB pendrive. */
 data class StorageRoot(val label: String, val dir: File)
@@ -82,7 +89,8 @@ class StorageRepository(private val context: Context) {
                 .maxDepth(MAX_SCAN_DEPTH)
                 .filter { it.isFile && it.extension.lowercase() in VIDEO_EXTENSIONS }
                 .toList()
-            val (episodeFiles, filmFiles) = videos.partition {
+            val (trailerFiles, titleFiles) = videos.partition { it.name.contains("trailer", ignoreCase = true) }
+            val (episodeFiles, filmFiles) = titleFiles.partition {
                 RingsOfPower.seasonAndEpisode(it.path, it.name) != null
             }
             val episodes = episodeFiles.map { file ->
@@ -99,6 +107,11 @@ class StorageRepository(private val context: Context) {
                     filmFiles.firstOrNull { film.matches(it.name) }?.let { film.id to it.toFilmFile() }
                 }.toMap(),
                 episodes = episodes,
+                trailers = trailerFiles.mapNotNull { file ->
+                    val key = films.firstOrNull { it.matches(file.name) }?.id
+                        ?: RingsOfPower.SERIES_ID.takeIf { RingsOfPower.isSeries(file.path) }
+                    key?.let { it to file.toFilmFile() }
+                }.toMap(),
             )
         }
 
