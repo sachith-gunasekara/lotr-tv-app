@@ -47,7 +47,7 @@ import androidx.media3.ui.compose.PlayerSurface
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.example.lotr.data.PlaybackPositionRepository
-import com.example.lotr.data.model.Film
+import com.example.lotr.data.model.Watchable
 import com.example.lotr.ui.components.formatPlaybackTime
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -59,7 +59,7 @@ private const val OVERLAY_TIMEOUT_MS = 3_000L
 
 @Composable
 fun PlayerScreen(
-    film: Film,
+    watchable: Watchable,
     uri: Uri,
     playbackPositionRepository: PlaybackPositionRepository,
     modifier: Modifier = Modifier,
@@ -77,12 +77,14 @@ fun PlayerScreen(
     var interaction by remember { mutableIntStateOf(0) }
     var overlayVisible by remember { mutableStateOf(true) }
 
-    LaunchedEffect(film.id, uri) {
-        val startPositionMs = playbackPositionRepository.positionMs(film.id).first()
+    LaunchedEffect(watchable.id, uri) {
+        val startPositionMs = playbackPositionRepository.positionMs(watchable.id).first()
         exoPlayer.setMediaItem(MediaItem.fromUri(uri))
         exoPlayer.prepare()
         if (startPositionMs > 0) exoPlayer.seekTo(startPositionMs)
         exoPlayer.play()
+        // Record it as last watched straight away, so Home's banner follows what's playing.
+        playbackPositionRepository.saveProgress(watchable.id, startPositionMs, durationMs = 0)
     }
 
     LaunchedEffect(exoPlayer) {
@@ -119,7 +121,7 @@ fun PlayerScreen(
 
         val lifecycleObserver = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_PAUSE) {
-                scope.launch { playbackPositionRepository.savePosition(film.id, resumePosition()) }
+                scope.launch { playbackPositionRepository.saveProgress(watchable.id, resumePosition(), exoPlayer.duration.coerceAtLeast(0)) }
             }
         }
         lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
@@ -129,7 +131,7 @@ fun PlayerScreen(
             exoPlayer.removeListener(playerListener)
             // scope is torn down alongside this composable, so the final save can't rely on
             // it outliving this callback; block briefly instead for a single Preferences write.
-            runBlocking { playbackPositionRepository.savePosition(film.id, resumePosition()) }
+            runBlocking { playbackPositionRepository.saveProgress(watchable.id, resumePosition(), exoPlayer.duration.coerceAtLeast(0)) }
             exoPlayer.release()
         }
     }
@@ -177,7 +179,7 @@ fun PlayerScreen(
             PlaybackErrorMessage(currentError, Modifier.align(Alignment.Center))
         } else if (overlayVisible) {
             PlayerOverlay(
-                title = film.title,
+                title = watchable.title,
                 isPlaying = isPlaying,
                 positionMs = positionMs,
                 durationMs = durationMs,

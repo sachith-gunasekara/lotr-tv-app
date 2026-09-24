@@ -58,6 +58,7 @@ import com.example.lotr.data.FilmRepository
 import com.example.lotr.data.PlaybackPositionRepository
 import com.example.lotr.data.StorageRepository
 import com.example.lotr.data.model.Film
+import com.example.lotr.data.model.Watchable
 import com.example.lotr.ui.components.LotrButton
 import com.example.lotr.ui.components.formatPlaybackTime
 import kotlinx.coroutines.launch
@@ -67,7 +68,7 @@ fun FilmsScreen(
     storageRepository: StorageRepository,
     filmLibrary: FilmLibrary,
     playbackPositionRepository: PlaybackPositionRepository,
-    onPlay: (Film, Uri) -> Unit,
+    onPlay: (Watchable, Uri) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val hasPermission by filmLibrary.hasPermission.collectAsState()
@@ -130,7 +131,7 @@ fun FilmsScreen(
                             onPlay = onPlay,
                             onStartOver = { film, uri ->
                                 scope.launch {
-                                    playbackPositionRepository.savePosition(film.id, 0)
+                                    playbackPositionRepository.resetPosition(film.id)
                                     onPlay(film, uri)
                                 }
                             },

@@ -14,7 +14,7 @@ import androidx.lifecycle.lifecycleScope
 import com.example.lotr.data.FilmLibrary
 import com.example.lotr.data.PlaybackPositionRepository
 import com.example.lotr.data.StorageRepository
-import com.example.lotr.data.model.Film
+import com.example.lotr.data.model.Watchable
 import com.example.lotr.ui.films.FilmsScreen
 import com.example.lotr.ui.home.HomeScreen
 import com.example.lotr.ui.player.PlayerScreen
@@ -23,7 +23,7 @@ import com.example.lotr.ui.theme.LotrTheme
 private sealed interface Screen {
     data object Home : Screen
     data object Films : Screen
-    data class Player(val film: Film, val uri: Uri) : Screen
+    data class Player(val watchable: Watchable, val uri: Uri) : Screen
 }
 
 class MainActivity : ComponentActivity() {
@@ -61,16 +61,16 @@ class MainActivity : ComponentActivity() {
                             filmLibrary = filmLibrary,
                             playbackPositionRepository = playbackPositionRepository,
                             onOpenFilms = { backStack = backStack + Screen.Films },
-                            onPlay = { film, uri -> backStack = backStack + Screen.Player(film, uri) },
+                            onPlay = { watchable, uri -> backStack = backStack + Screen.Player(watchable, uri) },
                         )
                         Screen.Films -> FilmsScreen(
                             storageRepository = storageRepository,
                             filmLibrary = filmLibrary,
                             playbackPositionRepository = playbackPositionRepository,
-                            onPlay = { film, uri -> backStack = backStack + Screen.Player(film, uri) },
+                            onPlay = { watchable, uri -> backStack = backStack + Screen.Player(watchable, uri) },
                         )
                         is Screen.Player -> PlayerScreen(
-                            film = current.film,
+                            watchable = current.watchable,
                             uri = current.uri,
                             playbackPositionRepository = playbackPositionRepository,
                         )
