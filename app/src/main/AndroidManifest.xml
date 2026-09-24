@@ -5,6 +5,8 @@
     <!-- Appendices: behind-the-scenes videos and their thumbnails come from YouTube. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <!-- The Vault's artwork: pictures in an Art folder on the drive. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />

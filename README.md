@@ -31,9 +31,15 @@ LOTR/
 ├── Trailers/                                        (optional)
 │   ├── Fellowship of the Ring trailer.mp4           played on the Home banner, with sound
 │   └── The Rings of Power trailer.mp4
-└── Appendices/                                      (optional; also "Extras", "Bonus", …)
-    └── Disc 1 - From Book to Vision/…mkv            shown first in Appendices
+├── Appendices/                                      (optional; also "Extras", "Bonus", …)
+│   └── Disc 1 - From Book to Vision/…mkv            shown first in Appendices
+└── Art/                                             (optional; also "Artwork", "Gallery", …)
+    └── Alan Lee - Rivendell.jpg                     shown in The Vault → Artwork
 ```
+
+**The Vault** has the maps built in (a zoomable Middle-earth with its places and the great
+journeys, plus the Shire, the Pelennor, Beleriand and Númenor); pictures in an `Art` folder are
+added as Artwork (the app asks for access to pictures the first time).
 
 **Appendices** also streams the extended editions' behind-the-scenes documentaries from YouTube,
 so the TV needs to be online for those.
@@ -59,5 +65,6 @@ then `./gradlew assembleRelease` → `app/build/outputs/apk/release/app-release.
 key to install over the old one (otherwise the app has to be uninstalled first, losing resume
 positions).
 
-See `CLAUDE.md` for architecture and conventions, and `third_party/` for font and icon licenses
-(note: the Aniron font is personal-use only).
+See `CLAUDE.md` for architecture and conventions, and `third_party/` for font, icon and map
+licenses (note: the Aniron font is personal-use only). The map assets are rebuilt from their
+sources with `python3 tools/maps/build_maps.py` (needs Pillow and Google Chrome).
