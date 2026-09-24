@@ -13,8 +13,8 @@ This is the **LOTR Birthday TV App** — a kiosk-style Android TV app for playin
 - **No navigation library** — screen count is small (Home/Films/Player, kiosk-style, no deep links), so navigation is a plain sealed-class state machine rather than Navigation-Compose. Revisit only if the screen graph grows meaningfully.
 - **No Coil / image-loading library** — poster and background art are bundled drawable resources (`painterResource`), not loaded dynamically. Add Coil only if a real dynamic-image use case shows up.
 - **Playback**: Media3/ExoPlayer (`androidx.media3:media3-exoplayer`, `media3-ui-compose` for the `PlayerSurface` composable), added when the player screen lands.
-- **USB access**: Storage Access Framework (`ACTION_OPEN_DOCUMENT_TREE` + `androidx.documentfile`), added when the storage layer lands. Remember: `takePersistableUriPermission` alone isn't enough — ExoPlayer reads also depend on the picker having granted read access; see `plan.md` §4 for the known gotcha.
-- **Persistence**: `androidx.datastore:datastore-preferences` for the persisted USB tree URI and per-film resume position. No Room — content is fixed (3 hardcoded films), so a database is overkill.
+- **USB access**: direct file reads with the video-read permission (`READ_MEDIA_VIDEO`, or `READ_EXTERNAL_STORAGE` on API ≤32), not the SAF picker — Android TV builds often ship without a document-picker app (the stock TV emulator has none). By default `StorageRepository` looks for a `LOTR` folder at the root of the first removable volume (the pendrive) and scans it plus subfolders (films are typically one folder per film); a custom folder chosen in the in-app `FolderBrowser` overrides it and is persisted. To test the pendrive path on the emulator: `adb shell sm set-virtual-disk true`, then `sm partition <disk> public`.
+- **Persistence**: `androidx.datastore:datastore-preferences` for the custom-folder path and per-film resume position. No Room — content is fixed (3 hardcoded films), so a database is overkill.
 - No DI framework, no networking library — none needed for this app.
 
 ### Source layout (UI/data separation)
@@ -60,8 +60,8 @@ Run all commands from the repository root using the Gradle wrapper.
 
 ## Architecture
 
-- `app/src/main/AndroidManifest.xml` — application manifest; currently declares only backup/data-extraction rules, icon, and theme, with no `<activity>` entries.
-- `app/src/main/res/` — standard resource set (launcher icons, `colors.xml`, `strings.xml`, day/night `themes.xml`, backup/data-extraction XML rules).
+- `app/src/main/AndroidManifest.xml` — declares `MainActivity` (TV launcher), the video-read permissions, and `leanback` feature.
+- `app/src/main/res/` — standard resource set (launcher icons, `colors.xml`, `strings.xml`, `themes.xml`, backup/data-extraction XML rules).
 - `app/src/test/` — JVM unit tests (JUnit 4, run via `testDebugUnitTest`).
 - `app/src/androidTest/` — instrumented tests (AndroidX Test + Espresso, run via `connectedDebugAndroidTest`).
 - Gradle version catalog lives at `gradle/libs.versions.toml` — add new dependencies/plugins there rather than hardcoding versions in `app/build.gradle.kts`.
