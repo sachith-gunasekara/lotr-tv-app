@@ -3,7 +3,6 @@ package com.example.lotr.ui.reading
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,7 +28,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.Painter
@@ -37,7 +35,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.example.lotr.data.FilmLibrary
@@ -49,6 +46,7 @@ import com.example.lotr.data.ReadingPiece
 import com.example.lotr.data.StorageRepository
 import com.example.lotr.data.readableName
 import com.example.lotr.ui.components.DetailsPanel
+import com.example.lotr.ui.components.GlyphPlaceholder
 import com.example.lotr.ui.components.ImmersiveBackdrop
 import com.example.lotr.ui.components.ShelfCard
 import com.example.lotr.ui.components.ShelfColumn
@@ -164,12 +162,12 @@ fun ReadingScreen(
                                 ) {
                                     when (item) {
                                         is ReadingItem.Letter -> {
-                                            ReadingPlaceholder(glyph = "")
+                                            GlyphPlaceholder(glyph = "", tint = TileEmber)
                                             rememberLetter(item.file, tiles, maxSide = 480)?.let {
                                                 Image(it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                                             }
                                         }
-                                        is ReadingItem.Text -> ReadingPlaceholder(glyph = item.piece.glyph)
+                                        is ReadingItem.Text -> GlyphPlaceholder(glyph = item.piece.glyph, tint = TileEmber)
                                     }
                                 }
                             }
@@ -190,31 +188,6 @@ private val ReadingItem.cardTitle: String
 /** The small gold line on a card: the date for the Tale of Years, nothing otherwise. */
 private val ReadingPiece.cardOverline: String?
     get() = overline.substringAfter("The Tale of Years  ·  ", missingDelimiterValue = "").ifEmpty { null }
-
-/** A warm ember panel with the card's word, year or initial in large Elvish lettering. */
-@Composable
-fun ReadingPlaceholder(glyph: String, modifier: Modifier = Modifier) {
-    Box(
-        modifier
-            .fillMaxSize()
-            .background(Brush.linearGradient(listOf(TileEmber, TileEmber.copy(alpha = 0.6f), MaterialTheme.colorScheme.background))),
-    ) {
-        Text(
-            text = glyph,
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f),
-            // Sized to fit the card: an initial large, a year smaller, a word smaller still.
-            style = MaterialTheme.typography.displayLarge.copy(
-                fontSize = when {
-                    glyph.length <= 2 -> 72.sp
-                    glyph.length <= 4 -> 50.sp
-                    else -> 28.sp
-                },
-            ),
-            maxLines = 1,
-            modifier = Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 14.dp),
-        )
-    }
-}
 
 @Composable
 private fun rememberLetter(file: File, tiles: MapTileRepository, maxSide: Int): ImageBitmap? {

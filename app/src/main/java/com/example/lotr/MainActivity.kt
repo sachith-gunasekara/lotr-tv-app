@@ -14,6 +14,7 @@ import androidx.lifecycle.lifecycleScope
 import com.example.lotr.data.Atlas
 import com.example.lotr.data.FilmLibrary
 import com.example.lotr.data.MapTileRepository
+import com.example.lotr.data.MusicRepository
 import com.example.lotr.data.PlaybackPositionRepository
 import com.example.lotr.data.StorageRepository
 import com.example.lotr.data.ThumbnailRepository
@@ -23,6 +24,7 @@ import com.example.lotr.data.model.Watchable
 import com.example.lotr.ui.appendices.AppendicesScreen
 import com.example.lotr.ui.home.HomeDestination
 import com.example.lotr.ui.library.LibraryScreen
+import com.example.lotr.ui.music.MusicScreen
 import com.example.lotr.ui.home.HomeScreen
 import com.example.lotr.ui.player.PlayerScreen
 import com.example.lotr.ui.player.YouTubePlayerScreen
@@ -43,6 +45,7 @@ private sealed interface Screen {
     data class Map(val mapId: String, val journeyId: String? = null) : Screen
 
     data object Reading : Screen
+    data object Music : Screen
 
     /** A text from the Reading room: [index] on shelf [shelf]. */
     data class Reader(val shelf: Int, val index: Int) : Screen
@@ -63,6 +66,7 @@ class MainActivity : ComponentActivity() {
     private val filmLibrary by lazy { FilmLibrary(storageRepository, lifecycleScope) }
     private val thumbnails by lazy { ThumbnailRepository(applicationContext) }
     private val mapTiles by lazy { MapTileRepository(applicationContext) }
+    private val music by lazy { MusicRepository(applicationContext) }
 
     override fun onResume() {
         super.onResume()
@@ -102,7 +106,7 @@ class MainActivity : ComponentActivity() {
                                     HomeDestination.Appendices -> push(Screen.Appendices)
                                     HomeDestination.Vault -> push(Screen.Vault)
                                     HomeDestination.Reading -> push(Screen.Reading)
-                                    else -> Unit
+                                    HomeDestination.Music -> push(Screen.Music)
                                 }
                             },
                             onPlay = { watchable, uri -> push(Screen.Player(watchable, uri)) },
@@ -137,6 +141,11 @@ class MainActivity : ComponentActivity() {
                             onOpenLetter = { files, index -> push(Screen.Pictures(files, index, folder = "Letters")) },
                         )
                         is Screen.Reader -> ReaderScreen(shelfIndex = current.shelf, startIndex = current.index)
+                        Screen.Music -> MusicScreen(
+                            filmLibrary = filmLibrary,
+                            music = music,
+                            onPlayOnline = { push(Screen.YouTube(it)) },
+                        )
                         is Screen.Map -> {
                             val map = Atlas.map(current.mapId)
                             MapScreen(
