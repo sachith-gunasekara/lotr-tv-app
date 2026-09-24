@@ -1,6 +1,22 @@
 package com.example.lotr.ui.films
 
 import android.net.Uri
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.tv.material3.Glow
+import com.example.lotr.data.FilmLibrary
+import com.example.lotr.data.FilmScan
+import com.example.lotr.data.model.FilmFile
+import com.example.lotr.ui.components.backdropRes
+import com.example.lotr.ui.components.lotrBackground
+import com.example.lotr.ui.theme.LotrBackground
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -44,39 +60,23 @@ import com.example.lotr.data.StorageRepository
 import com.example.lotr.data.model.Film
 import com.example.lotr.ui.components.LotrButton
 import com.example.lotr.ui.components.formatPlaybackTime
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import java.io.File
-
-/** Result of looking for the films: where we looked ([folder] is null if nowhere) and what matched. */
-private data class FilmScan(val folder: File?, val isCustom: Boolean, val filmUris: Map<String, Uri>)
 
 @Composable
 fun FilmsScreen(
     storageRepository: StorageRepository,
+    filmLibrary: FilmLibrary,
     playbackPositionRepository: PlaybackPositionRepository,
     onPlay: (Film, Uri) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var hasPermission by remember { mutableStateOf(storageRepository.hasReadPermission()) }
+    val hasPermission by filmLibrary.hasPermission.collectAsState()
+    val scan by filmLibrary.scan.collectAsState()
     val requestPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        hasPermission = it
+        filmLibrary.rescan()
     }
     LaunchedEffect(Unit) {
         if (!hasPermission) requestPermission.launch(storageRepository.readPermission)
-    }
-
-    var scan by remember { mutableStateOf<FilmScan?>(null) }
-    LaunchedEffect(hasPermission) {
-        if (!hasPermission) return@LaunchedEffect
-        storageRepository.customFolder.collectLatest { custom ->
-            val folder = custom ?: storageRepository.findUsbLotrFolder()
-            scan = FilmScan(
-                folder = folder,
-                isCustom = custom != null,
-                filmUris = folder?.let { storageRepository.findFilmUris(it) }.orEmpty(),
-            )
-        }
     }
 
     var browsing by remember { mutableStateOf(false) }
@@ -98,53 +98,78 @@ fun FilmsScreen(
     // player lands back on the film that was playing.
     var selectedFilmId by rememberSaveable { mutableStateOf(FilmRepository.films.first().id) }
     val selectedFilm = FilmRepository.films.first { it.id == selectedFilmId }
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(48.dp),
-    ) {
+    Box(modifier = modifier.fillMaxSize().lotrBackground()) {
         val current = scan
-        when {
-            !hasPermission -> StatusMessage(
-                text = "Allow access to storage so the films can be found on the USB drive.",
-                actionLabel = "Allow access",
-                onAction = { requestPermission.launch(storageRepository.readPermission) },
-            )
-            current == null -> StatusMessage(text = "Looking for the films…")
-            current.folder == null -> StatusMessage(
-                text = "Insert the USB pendrive with a LOTR folder on it, or choose a folder.",
-                actionLabel = "Choose a folder",
-                onAction = { browsing = true },
-            )
-            else -> Column {
-                Row(horizontalArrangement = Arrangement.spacedBy(48.dp), modifier = Modifier.weight(1f)) {
-                    FilmPosterList(
-                        films = FilmRepository.films,
-                        selectedFilm = selectedFilm,
-                        onSelect = { selectedFilmId = it.id },
-                    )
-                    val resumeAtMs by playbackPositionRepository.positionMs(selectedFilm.id)
-                        .collectAsState(initial = 0L)
-                    FilmDetail(
-                        film = selectedFilm,
-                        playableUri = current.filmUris[selectedFilm.id],
-                        resumeAtMs = resumeAtMs,
-                        onPlay = onPlay,
-                        onStartOver = { film, uri ->
-                            scope.launch {
-                                playbackPositionRepository.savePosition(film.id, 0)
-                                onPlay(film, uri)
-                            }
-                        },
+        if (current?.folder != null) SelectedFilmBackdrop(selectedFilm)
+        Box(Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 32.dp)) {
+            when {
+                !hasPermission -> StatusMessage(
+                    text = "Allow access to storage so the films can be found on the USB drive.",
+                    actionLabel = "Allow access",
+                    onAction = { requestPermission.launch(storageRepository.readPermission) },
+                )
+                current == null -> StatusMessage(text = "Looking for the films…")
+                current.folder == null -> StatusMessage(
+                    text = "Insert the USB pendrive with a LOTR folder on it, or choose a folder.",
+                    actionLabel = "Choose a folder",
+                    onAction = { browsing = true },
+                )
+                else -> Column {
+                    Row(horizontalArrangement = Arrangement.spacedBy(40.dp), modifier = Modifier.weight(1f)) {
+                        FilmPosterList(
+                            films = FilmRepository.films,
+                            selectedFilm = selectedFilm,
+                            onSelect = { selectedFilmId = it.id },
+                        )
+                        val resumeAtMs by playbackPositionRepository.positionMs(selectedFilm.id)
+                            .collectAsState(initial = 0L)
+                        FilmDetail(
+                            film = selectedFilm,
+                            file = current.files[selectedFilm.id],
+                            resumeAtMs = resumeAtMs,
+                            onPlay = onPlay,
+                            onStartOver = { film, uri ->
+                                scope.launch {
+                                    playbackPositionRepository.savePosition(film.id, 0)
+                                    onPlay(film, uri)
+                                }
+                            },
+                        )
+                    }
+                    SourceBar(
+                        scan = current,
+                        onChooseFolder = { browsing = true },
+                        onUseUsb = { scope.launch { storageRepository.setCustomFolder(null) } },
                     )
                 }
-                SourceBar(
-                    scan = current,
-                    onChooseFolder = { browsing = true },
-                    onUseUsb = { scope.launch { storageRepository.setCustomFolder(null) } },
-                )
             }
+        }
+    }
+}
+
+/** The selected film's still, dimmed behind the page, fading in when the selection changes. */
+@Composable
+private fun SelectedFilmBackdrop(film: Film) {
+    Crossfade(targetState = film, animationSpec = tween(600), label = "backdrop") { shown ->
+        Box(Modifier.fillMaxSize()) {
+            Image(
+                painter = painterResource(shown.backdropRes()),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                alignment = Alignment.CenterEnd,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            0f to LotrBackground,
+                            0.35f to LotrBackground.copy(alpha = 0.9f),
+                            1f to LotrBackground.copy(alpha = 0.45f),
+                        ),
+                    ),
+            )
         }
     }
 }
@@ -196,42 +221,42 @@ private fun FilmPosterList(films: List<Film>, selectedFilm: Film, onSelect: (Fil
         withFrameNanos { }
         selectedItemFocusRequester.requestFocus()
     }
+    val gold = MaterialTheme.colorScheme.primary
+    val shape = RoundedCornerShape(12.dp)
 
     LazyColumn(
         modifier = Modifier.focusRestorer(selectedItemFocusRequester),
         verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(8.dp),
     ) {
         items(films) { film ->
             val isSelected = film.id == selectedFilm.id
             Card(
                 onClick = { onSelect(film) },
                 modifier = Modifier
-                    .size(width = 220.dp, height = 130.dp)
+                    .size(width = 240.dp, height = 110.dp)
                     .let { if (isSelected) it.focusRequester(selectedItemFocusRequester) else it },
-                colors = CardDefaults.colors(
-                    containerColor = if (isSelected) {
-                        MaterialTheme.colorScheme.surface
-                    } else {
-                        MaterialTheme.colorScheme.background
-                    },
-                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                ),
+                shape = CardDefaults.shape(shape),
                 border = CardDefaults.border(
-                    border = if (isSelected) {
-                        Border(border = BorderStroke(width = 2.dp, color = MaterialTheme.colorScheme.primary))
-                    } else {
-                        Border.None
-                    },
-                    focusedBorder = Border(
-                        border = BorderStroke(width = 3.dp, color = MaterialTheme.colorScheme.primary),
-                    ),
+                    border = Border(BorderStroke(if (isSelected) 2.dp else 1.dp, gold.copy(alpha = if (isSelected) 0.9f else 0.25f)), shape = shape),
+                    focusedBorder = Border(BorderStroke(3.dp, gold), shape = shape),
                 ),
+                glow = CardDefaults.glow(focusedGlow = Glow(elevationColor = gold.copy(alpha = 0.6f), elevation = 14.dp)),
             ) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxSize()) {
+                    Image(
+                        painter = painterResource(film.backdropRes()),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.3f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.85f))))
                     Text(
                         text = film.title,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.secondary,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        modifier = Modifier.align(Alignment.BottomStart).padding(10.dp),
                     )
                 }
             }
@@ -242,20 +267,23 @@ private fun FilmPosterList(films: List<Film>, selectedFilm: Film, onSelect: (Fil
 @Composable
 private fun FilmDetail(
     film: Film,
-    playableUri: Uri?,
+    file: FilmFile?,
     resumeAtMs: Long,
     onPlay: (Film, Uri) -> Unit,
     onStartOver: (Film, Uri) -> Unit,
 ) {
-    Column(modifier = Modifier.width(480.dp)) {
+    val playableUri = file?.uri
+    Column(modifier = Modifier.width(520.dp).padding(top = 8.dp)) {
         Text(
             text = film.title,
-            color = MaterialTheme.colorScheme.primary,
+            color = MaterialTheme.colorScheme.secondary,
             style = MaterialTheme.typography.headlineMedium,
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = film.runtime.toString(),
+            text = listOfNotNull(film.year.toString(), film.runtimeFor(file?.tags).toString())
+                .plus(file?.tags?.labels.orEmpty())
+                .joinToString("  ·  "),
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
             style = MaterialTheme.typography.bodyMedium,
         )

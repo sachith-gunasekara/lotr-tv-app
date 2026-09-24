@@ -10,6 +10,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.lifecycleScope
+import com.example.lotr.data.FilmLibrary
 import com.example.lotr.data.PlaybackPositionRepository
 import com.example.lotr.data.StorageRepository
 import com.example.lotr.data.model.Film
@@ -25,11 +27,19 @@ private sealed interface Screen {
 }
 
 class MainActivity : ComponentActivity() {
+    private val storageRepository by lazy { StorageRepository(applicationContext) }
+    private val filmLibrary by lazy { FilmLibrary(storageRepository, lifecycleScope) }
+
+    override fun onResume() {
+        super.onResume()
+        // Picks up a pendrive plugged in (or a permission granted in Settings) while away.
+        filmLibrary.rescan()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             LotrTheme {
-                val storageRepository = remember { StorageRepository(applicationContext) }
                 val playbackPositionRepository = remember { PlaybackPositionRepository(applicationContext) }
                 val saveableStateHolder = rememberSaveableStateHolder()
                 var backStack by remember { mutableStateOf(listOf<Screen>(Screen.Home)) }
@@ -48,10 +58,14 @@ class MainActivity : ComponentActivity() {
                 saveableStateHolder.SaveableStateProvider(current.toString()) {
                     when (current) {
                         Screen.Home -> HomeScreen(
+                            filmLibrary = filmLibrary,
+                            playbackPositionRepository = playbackPositionRepository,
                             onOpenFilms = { backStack = backStack + Screen.Films },
+                            onPlay = { film, uri -> backStack = backStack + Screen.Player(film, uri) },
                         )
                         Screen.Films -> FilmsScreen(
                             storageRepository = storageRepository,
+                            filmLibrary = filmLibrary,
                             playbackPositionRepository = playbackPositionRepository,
                             onPlay = { film, uri -> backStack = backStack + Screen.Player(film, uri) },
                         )
