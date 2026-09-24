@@ -3,8 +3,8 @@ package com.example.lotr.data
 /** One season of the series: its premiere year, a premise, and what's known of each episode. */
 data class SeasonInfo(val number: Int, val year: Int, val premise: String, val episodes: List<EpisodeInfo>)
 
-/** A title and spoiler-light teaser; null where not announced yet. */
-data class EpisodeInfo(val title: String?, val teaser: String?)
+/** A title and spoiler-light teaser (null where not announced yet), and a release date if upcoming. */
+data class EpisodeInfo(val title: String?, val teaser: String?, val arrives: String? = null)
 
 /**
  * Catalog and filename conventions for The Lord of the Rings: The Rings of Power (Prime Video).
@@ -55,11 +55,33 @@ object RingsOfPower {
             number = 3,
             year = 2026,
             premise = "Five years on, the war between the Elves and the Dark Lord reaches its height.",
-            episodes = List(8) { EpisodeInfo(title = null, teaser = null) },
+            episodes = List(8) { i ->
+                val arrives = when (i + 1) {
+                    in 1..4 -> "11 Nov 2026"
+                    in 5..6 -> "18 Nov 2026"
+                    else -> "25 Nov 2026"
+                }
+                EpisodeInfo(title = null, teaser = null, arrives = arrives)
+            },
         ),
     )
 
     fun season(number: Int): SeasonInfo? = seasons.firstOrNull { it.number == number }
+
+    /** Release date for an episode that hasn't aired yet, e.g. "11 Nov 2026"; null otherwise. */
+    fun arrives(season: Int, number: Int): String? = season(season)?.episodes?.getOrNull(number - 1)?.arrives
+
+    /**
+     * Every catalog episode, plus any found on the drive beyond the catalog (e.g. a later season),
+     * in season/episode order, each paired with its file from [found] if there is one.
+     */
+    fun <T> withCatalog(found: Map<Pair<Int, Int>, T>): List<Triple<Int, Int, T?>> {
+        val catalog = seasons.flatMap { s -> (1..s.episodes.size).map { s.number to it } }
+        return (catalog + found.keys)
+            .distinct()
+            .sortedWith(compareBy({ it.first }, { it.second }))
+            .map { (season, number) -> Triple(season, number, found[season to number]) }
+    }
 
     private val SERIES_NAME = Regex("""rings.?of.?power""", RegexOption.IGNORE_CASE)
 

@@ -93,15 +93,17 @@ class StorageRepository(private val context: Context) {
             val (episodeFiles, filmFiles) = titleFiles.partition {
                 RingsOfPower.seasonAndEpisode(it.path, it.name) != null
             }
-            val episodes = episodeFiles.map { file ->
-                val (season, number) = RingsOfPower.seasonAndEpisode(file.path, file.name)!!
+            val found = episodeFiles
+                .associateBy { RingsOfPower.seasonAndEpisode(it.path, it.name)!! }
+            val episodes = RingsOfPower.withCatalog(found).map { (season, number, file) ->
                 Episode(
                     season = season,
                     number = number,
-                    title = RingsOfPower.episodeTitle(season, number, file.name),
-                    file = file.toFilmFile(),
+                    title = RingsOfPower.episodeTitle(season, number, file?.name.orEmpty()),
+                    file = file?.toFilmFile(),
+                    arrives = RingsOfPower.arrives(season, number),
                 )
-            }.distinctBy { it.id }.sortedWith(compareBy({ it.season }, { it.number }))
+            }
             LibraryContents(
                 films = films.mapNotNull { film ->
                     filmFiles.firstOrNull { film.matches(it.name) }?.let { film.id to it.toFilmFile() }

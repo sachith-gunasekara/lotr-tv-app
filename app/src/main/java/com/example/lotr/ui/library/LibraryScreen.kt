@@ -214,31 +214,32 @@ private fun Shelves(
             }
 
             Spacer(Modifier.height(2.dp))
-            ShelfTitle(RingsOfPower.TITLE)
-            if (episodes.isEmpty()) {
-                Text(
-                    text = "Add the series to the drive in a \"Rings of Power\" folder (files named like S01E01) and its episodes will appear here.",
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(start = 48.dp, top = 8.dp, bottom = 40.dp).width(640.dp),
-                )
-            } else {
-                EpisodeShelf(
-                    episodes = episodes,
-                    focusedId = focused.id,
-                ) { episode ->
-                    WatchableCard(
-                        watchable = episode,
-                        file = episode.file,
-                        playbackPositionRepository = playbackPositionRepository,
-                        width = 176,
-                        onPlay = onPlay,
-                        onStartOver = onStartOver,
-                        modifier = Modifier
-                            .onFocusChanged { if (it.isFocused) onCardFocused(episode) }
-                            .let { if (episode.id == focused.id) it.focusRequester(initialFocus) else it },
-                    ) { EpisodeArt(episode, thumbnails) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ShelfTitle(RingsOfPower.TITLE)
+                if (episodes.none { it.file != null }) {
+                    Text(
+                        text = "none on the drive yet - add a \"Rings of Power\" folder with files named like S01E01",
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(start = 16.dp),
+                    )
                 }
+            }
+            EpisodeShelf(
+                episodes = episodes,
+                focusedId = focused.id,
+            ) { episode ->
+                WatchableCard(
+                    watchable = episode,
+                    file = episode.file,
+                    playbackPositionRepository = playbackPositionRepository,
+                    width = 176,
+                    onPlay = onPlay,
+                    onStartOver = onStartOver,
+                    modifier = Modifier
+                        .onFocusChanged { if (it.isFocused) onCardFocused(episode) }
+                        .let { if (episode.id == focused.id) it.focusRequester(initialFocus) else it },
+                ) { EpisodeArt(episode, thumbnails) }
             }
         }
     }
@@ -263,20 +264,22 @@ private fun EpisodeShelf(episodes: List<Episode>, focusedId: String, card: @Comp
         verticalAlignment = Alignment.CenterVertically,
     ) {
         bySeason.forEach { (season, seasonEpisodes) ->
-            item(key = "season_$season") { SeasonMarker(season, onDrive = seasonEpisodes.size) }
+            item(key = "season_$season") {
+                SeasonMarker(season, onDrive = seasonEpisodes.count { it.file != null }, total = seasonEpisodes.size)
+            }
             items(seasonEpisodes, key = { it.id }) { card(it) }
         }
     }
 }
 
 @Composable
-private fun SeasonMarker(season: Int, onDrive: Int) {
+private fun SeasonMarker(season: Int, onDrive: Int, total: Int) {
     val info = RingsOfPower.season(season)
     Column(Modifier.width(92.dp)) {
         Text("Season $season", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall)
         info?.let {
             Text(
-                text = "${it.year}  ·  $onDrive of ${it.episodes.size}",
+                text = "${it.year}  ·  $onDrive/$total on drive",
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f),
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -390,15 +393,39 @@ private fun EpisodeArt(episode: Episode, thumbnails: ThumbnailRepository) {
     if (frame != null) {
         Image(bitmap = frame, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
     } else {
-        // Until (or unless) a frame decodes: a warm placeholder.
-        Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Color(0xFF3A2A1A), Color(0xFF1A130C)))))
+        EpisodePlaceholder(episode)
+    }
+    if (episode.file == null) {
+        Text(
+            text = episode.arrives?.let { "arrives $it" } ?: "not on the drive",
+            color = MaterialTheme.colorScheme.onBackground,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(10.dp),
+        )
+    }
+}
+
+/** For episodes without a picture: a warm panel with the episode number in large Elvish lettering. */
+@Composable
+fun EpisodePlaceholder(episode: Episode, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .fillMaxSize()
+            .background(Brush.linearGradient(listOf(Color(0xFF4A3520), Color(0xFF1F150C), Color(0xFF0E0B08)))),
+    ) {
+        Text(
+            text = episode.number.toString(),
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+            style = MaterialTheme.typography.displayLarge.copy(fontSize = 96.sp),
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 14.dp),
+        )
     }
 }
 
 @Composable
-private fun rememberFrame(file: FilmFile, thumbnails: ThumbnailRepository): ImageBitmap? {
+private fun rememberFrame(file: FilmFile?, thumbnails: ThumbnailRepository): ImageBitmap? {
     val frame by produceState<ImageBitmap?>(null, file) {
-        value = thumbnails.frame(file)?.asImageBitmap()
+        value = file?.let { thumbnails.frame(it)?.asImageBitmap() }
     }
     return frame
 }
@@ -501,6 +528,9 @@ private fun DetailsPanel(
         Spacer(Modifier.height(6.dp))
         Text(
             text = when {
+                file == null && watchable is Episode && watchable.arrives != null ->
+                    "Arrives ${watchable.arrives} on Prime Video - add it to the drive once it's out"
+                file == null && watchable is Episode -> "Not on the drive yet"
                 file == null -> "Not in this folder"
                 progress.positionMs > 0 -> "OK to resume at ${formatPlaybackTime(progress.positionMs)}  ·  hold OK to start over"
                 else -> "OK to play"

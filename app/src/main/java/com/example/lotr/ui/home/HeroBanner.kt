@@ -58,6 +58,7 @@ import com.example.lotr.data.model.Watchable
 import com.example.lotr.ui.components.WarmCard
 import com.example.lotr.ui.components.backdropRes
 import com.example.lotr.ui.components.formatPlaybackTime
+import com.example.lotr.ui.library.EpisodePlaceholder
 import com.example.lotr.ui.theme.LotrBackground
 import kotlinx.coroutines.delay
 
@@ -200,7 +201,7 @@ private fun HeroStill(watchable: Watchable, file: FilmFile?, thumbnails: Thumbna
             }
             frame?.let {
                 Image(bitmap = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-            }
+            } ?: EpisodePlaceholder(watchable)
         }
     }
 }
