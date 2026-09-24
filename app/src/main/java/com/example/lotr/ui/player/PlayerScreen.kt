@@ -198,10 +198,11 @@ private fun PlayerOverlay(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))))
+            .background(Brush.verticalGradient(0f to Color.Transparent, 0.3f to Color.Black.copy(alpha = 0.6f), 1f to Color.Black.copy(alpha = 0.9f)))
+            .padding(top = 48.dp)
             .padding(horizontal = 48.dp, vertical = 32.dp),
     ) {
-        Text(title, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.headlineSmall)
+        Text(title, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.headlineSmall)
         val progress = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
         Box(
             modifier = Modifier
