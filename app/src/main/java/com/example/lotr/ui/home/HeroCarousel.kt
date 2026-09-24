@@ -142,7 +142,7 @@ private fun HeroSlide(film: Film, file: FilmFile?, resumeAtMs: Long, focused: Bo
         ) {
             val details = listOfNotNull(film.year.toString(), film.runtimeFor(file?.tags).toString(), "Extended Edition".takeIf { file?.tags?.extended == true })
             Text(
-                text = details.joinToString("  ·  ").uppercase(),
+                text = details.joinToString("  ·  "),
                 color = MaterialTheme.colorScheme.primary,
                 style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 2.sp),
             )
@@ -150,7 +150,7 @@ private fun HeroSlide(film: Film, file: FilmFile?, resumeAtMs: Long, focused: Bo
             Text(
                 text = film.title,
                 color = MaterialTheme.colorScheme.secondary,
-                style = MaterialTheme.typography.displaySmall.copy(fontSize = 28.sp, lineHeight = 34.sp, shadow = TextShadow),
+                style = MaterialTheme.typography.displaySmall.copy(fontSize = 26.sp, lineHeight = 32.sp, shadow = TextShadow),
                 maxLines = 2,
             )
             Spacer(Modifier.height(8.dp))
@@ -189,7 +189,7 @@ private fun ActionChip(text: String, highlighted: Boolean) {
     val gold = MaterialTheme.colorScheme.primary
     val shape = RoundedCornerShape(8.dp)
     Text(
-        text = text.uppercase(),
+        text = text,
         color = if (highlighted) MaterialTheme.colorScheme.onPrimary else gold,
         style = MaterialTheme.typography.titleSmall,
         modifier = Modifier
