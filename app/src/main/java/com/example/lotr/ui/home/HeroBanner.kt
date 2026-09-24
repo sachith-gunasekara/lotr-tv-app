@@ -88,8 +88,8 @@ fun HeroBanner(
         file != null -> Preview(file.uri, startMs = (watchable as? Film)?.backdropAtMs, withSound = false, loops = true)
         else -> null
     }
-    var previewStarted by remember(watchable.id) { mutableStateOf(false) }
-    var videoShowing by remember(watchable.id) { mutableStateOf(false) }
+    var previewStarted by remember(watchable.id, preview) { mutableStateOf(false) }
+    var videoShowing by remember(watchable.id, preview) { mutableStateOf(false) }
     LaunchedEffect(watchable.id, preview) {
         if (preview == null) return@LaunchedEffect
         delay(PREVIEW_DELAY_MS)
@@ -291,5 +291,8 @@ private fun AmbientPreview(
         // TextureView, not SurfaceView, so the video respects the card's rounded clip and fades.
         surfaceType = SURFACE_TYPE_TEXTURE_VIEW,
         contentScale = ContentScale.Crop,
+        // No black shutter before the first frame: the still underneath stays visible until
+        // real video arrives (or forever, if this device can't decode the file).
+        shutter = {},
     )
 }
