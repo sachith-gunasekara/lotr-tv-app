@@ -57,37 +57,37 @@ fun SectionTile(section: Section, onClick: () -> Unit, modifier: Modifier = Modi
             modifier = Modifier
                 .fillMaxSize()
                 .background(Brush.verticalGradient(listOf(section.tint, section.tint.copy(alpha = 0.55f), Color.Black.copy(alpha = 0.6f))))
-                .padding(10.dp),
+                .padding(horizontal = 8.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Top,
         ) {
             Text(
-                text = section.title.uppercase(),
+                text = section.title,
                 color = MaterialTheme.colorScheme.secondary,
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 13.sp),
+                style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp),
                 textAlign = TextAlign.Center,
                 maxLines = 1,
             )
             Text(
                 text = section.subtitle,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
-                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+                style = MaterialTheme.typography.bodySmall,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             Icon(
                 painter = painterResource(section.icon),
                 contentDescription = null,
                 tint = gold.copy(alpha = if (section.available) 1f else 0.6f),
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier.size(34.dp),
             )
             if (!section.available) {
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(2.dp))
                 Text(
-                    text = "COMING SOON",
+                    text = "coming soon",
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                    style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.5.sp),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                 )
             }
         }

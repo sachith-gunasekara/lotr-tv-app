@@ -50,9 +50,9 @@ import java.util.Locale
 private val sections = listOf(
     Section("The Films", "The trilogy", R.drawable.ic_movie, TileEarth, available = true),
     Section("Appendices", "Behind the scenes", R.drawable.ic_videocam, TileRiver, available = false),
-    Section("Digital Vault", "Maps & artwork", R.drawable.ic_explore, TileMoss, available = false),
+    Section("The Vault", "Maps & artwork", R.drawable.ic_explore, TileMoss, available = false),
     Section("Reading", "Letters & languages", R.drawable.ic_menu_book, TileEmber, available = false),
-    Section("Music & Scores", "The soundtrack", R.drawable.ic_music_note, TileTwilight, available = false),
+    Section("Music", "Scores & soundtrack", R.drawable.ic_music_note, TileTwilight, available = false),
 )
 
 @Composable
@@ -120,7 +120,7 @@ fun HomeScreen(
 private fun TopBar() {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = "THE LORD OF THE RINGS",
+            text = "The Lord of the Rings",
             color = MaterialTheme.colorScheme.primary,
             style = MaterialTheme.typography.titleMedium.copy(letterSpacing = 3.sp),
         )
