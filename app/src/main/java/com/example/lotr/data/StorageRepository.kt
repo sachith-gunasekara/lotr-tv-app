@@ -9,6 +9,7 @@ import android.os.Environment
 import androidx.core.content.ContextCompat
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.example.lotr.data.model.Episode
 import com.example.lotr.data.model.Film
 import com.example.lotr.data.model.FilmFile
 import com.example.lotr.data.model.ReleaseTags
@@ -17,6 +18,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.io.File
+
+/** What a scan found: film files by film id, and series episodes in order. */
+data class LibraryContents(val films: Map<String, FilmFile>, val episodes: List<Episode>)
 
 /** A mounted storage volume's root directory, e.g. internal storage or the USB pendrive. */
 data class StorageRoot(val label: String, val dir: File)
@@ -68,22 +72,41 @@ class StorageRepository(private val context: Context) {
             .sortedBy { it.name.lowercase() }
     }
 
-    /** Searches [folder] and its subfolders (e.g. one folder per film) for each film's video file. */
-    suspend fun findFilmFiles(folder: File, films: List<Film> = FilmRepository.films): Map<String, FilmFile> =
+    /**
+     * Searches [folder] and its subfolders (films are usually one folder per film; episodes a
+     * folder per season) for each film's file and any Rings of Power episodes.
+     */
+    suspend fun scanLibrary(folder: File, films: List<Film> = FilmRepository.films): LibraryContents =
         withContext(Dispatchers.IO) {
             val videos = folder.walkTopDown()
                 .maxDepth(MAX_SCAN_DEPTH)
                 .filter { it.isFile && it.extension.lowercase() in VIDEO_EXTENSIONS }
                 .toList()
-            films.mapNotNull { film ->
-                videos.firstOrNull { film.matches(it.name) }
-                    ?.let { film.id to FilmFile(Uri.fromFile(it), ReleaseTags.parse(it.name)) }
-            }.toMap()
+            val (episodeFiles, filmFiles) = videos.partition {
+                RingsOfPower.seasonAndEpisode(it.path, it.name) != null
+            }
+            val episodes = episodeFiles.map { file ->
+                val (season, number) = RingsOfPower.seasonAndEpisode(file.path, file.name)!!
+                Episode(
+                    season = season,
+                    number = number,
+                    title = RingsOfPower.episodeTitle(season, number, file.name),
+                    file = file.toFilmFile(),
+                )
+            }.distinctBy { it.id }.sortedWith(compareBy({ it.season }, { it.number }))
+            LibraryContents(
+                films = films.mapNotNull { film ->
+                    filmFiles.firstOrNull { film.matches(it.name) }?.let { film.id to it.toFilmFile() }
+                }.toMap(),
+                episodes = episodes,
+            )
         }
+
+    private fun File.toFilmFile() = FilmFile(Uri.fromFile(this), ReleaseTags.parse(name))
 
     private companion object {
         const val USB_FOLDER_NAME = "LOTR"
-        const val MAX_SCAN_DEPTH = 3
+        const val MAX_SCAN_DEPTH = 4
         val VIDEO_EXTENSIONS = setOf("mkv", "mp4", "m4v", "mov", "avi", "webm", "ts")
         val CUSTOM_FOLDER_KEY = stringPreferencesKey("custom_folder_path")
     }

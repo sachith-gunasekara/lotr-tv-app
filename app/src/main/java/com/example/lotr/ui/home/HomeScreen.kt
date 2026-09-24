@@ -36,6 +36,7 @@ import com.example.lotr.data.FilmRepository
 import com.example.lotr.data.FilmScan
 import com.example.lotr.data.PlaybackPositionRepository
 import com.example.lotr.data.model.Film
+import com.example.lotr.data.model.Watchable
 import com.example.lotr.ui.components.lotrBackground
 import com.example.lotr.ui.theme.TileEarth
 import com.example.lotr.ui.theme.TileEmber
@@ -60,7 +61,7 @@ fun HomeScreen(
     filmLibrary: FilmLibrary,
     playbackPositionRepository: PlaybackPositionRepository,
     onOpenFilms: () -> Unit,
-    onPlay: (Film, Uri) -> Unit,
+    onPlay: (Watchable, Uri) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scan by filmLibrary.scan.collectAsState()

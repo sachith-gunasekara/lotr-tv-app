@@ -1,5 +1,6 @@
 package com.example.lotr.data
 
+import com.example.lotr.data.model.Episode
 import com.example.lotr.data.model.FilmFile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -11,11 +12,16 @@ import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import java.io.File
 
-/** Where the films were looked for ([folder] is null if nowhere was found) and which were found. */
-data class FilmScan(val folder: File?, val isCustom: Boolean, val files: Map<String, FilmFile>)
+/** Where the library was looked for ([folder] is null if nowhere was found) and what was found. */
+data class FilmScan(
+    val folder: File?,
+    val isCustom: Boolean,
+    val files: Map<String, FilmFile>,
+    val episodes: List<Episode> = emptyList(),
+)
 
 /**
- * The scanned film collection, shared by every screen. Rescans when the storage permission is
+ * The scanned collection (films and Rings of Power episodes), shared by every screen. Rescans when the storage permission is
  * granted, the custom folder changes, or [rescan] is called (e.g. the pendrive was plugged in).
  */
 class FilmLibrary(private val storage: StorageRepository, scope: CoroutineScope) {
@@ -37,7 +43,13 @@ class FilmLibrary(private val storage: StorageRepository, scope: CoroutineScope)
             .mapLatest { (granted, custom) ->
                 if (!granted) return@mapLatest null
                 val folder = custom ?: storage.findUsbLotrFolder()
-                FilmScan(folder, isCustom = custom != null, files = folder?.let { storage.findFilmFiles(it) }.orEmpty())
+                val contents = folder?.let { storage.scanLibrary(it) }
+                FilmScan(
+                    folder = folder,
+                    isCustom = custom != null,
+                    files = contents?.films.orEmpty(),
+                    episodes = contents?.episodes.orEmpty(),
+                )
             }
             .stateIn(scope, SharingStarted.Eagerly, null)
 }
