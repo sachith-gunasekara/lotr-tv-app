@@ -1,5 +1,6 @@
 package com.example.lotr.data
 
+import com.example.lotr.data.model.DriveExtra
 import com.example.lotr.data.model.Episode
 import com.example.lotr.data.model.FilmFile
 import kotlinx.coroutines.CoroutineScope
@@ -19,10 +20,11 @@ data class FilmScan(
     val files: Map<String, FilmFile>,
     val episodes: List<Episode> = emptyList(),
     val trailers: Map<String, FilmFile> = emptyMap(),
+    val extras: List<DriveExtra> = emptyList(),
 )
 
 /**
- * The scanned collection (films and Rings of Power episodes), shared by every screen. Rescans when the storage permission is
+ * The scanned collection (films, Rings of Power episodes and extras), shared by every screen. Rescans when the storage permission is
  * granted, the custom folder changes, or [rescan] is called (e.g. the pendrive was plugged in).
  */
 class FilmLibrary(private val storage: StorageRepository, scope: CoroutineScope) {
@@ -51,6 +53,7 @@ class FilmLibrary(private val storage: StorageRepository, scope: CoroutineScope)
                     files = contents?.films.orEmpty(),
                     episodes = contents?.episodes.orEmpty(),
                     trailers = contents?.trailers.orEmpty(),
+                    extras = contents?.extras.orEmpty(),
                 )
             }
             .stateIn(scope, SharingStarted.Eagerly, null)

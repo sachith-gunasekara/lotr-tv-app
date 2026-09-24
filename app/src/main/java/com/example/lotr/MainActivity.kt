@@ -15,16 +15,27 @@ import com.example.lotr.data.FilmLibrary
 import com.example.lotr.data.PlaybackPositionRepository
 import com.example.lotr.data.StorageRepository
 import com.example.lotr.data.ThumbnailRepository
+import com.example.lotr.data.YouTubeVideo
 import com.example.lotr.data.model.Watchable
+import com.example.lotr.ui.appendices.AppendicesScreen
+import com.example.lotr.ui.home.HomeDestination
 import com.example.lotr.ui.library.LibraryScreen
 import com.example.lotr.ui.home.HomeScreen
 import com.example.lotr.ui.player.PlayerScreen
+import com.example.lotr.ui.player.YouTubePlayerScreen
 import com.example.lotr.ui.theme.LotrTheme
 
 private sealed interface Screen {
     data object Home : Screen
     data object Library : Screen
-    data class Player(val watchable: Watchable, val uri: Uri) : Screen
+    data object Appendices : Screen
+
+    /** A video file; [markLastWatched] for films and episodes, which the Home banner follows. */
+    data class Player(val id: String, val title: String, val uri: Uri, val markLastWatched: Boolean) : Screen {
+        constructor(watchable: Watchable, uri: Uri) : this(watchable.id, watchable.title, uri, markLastWatched = true)
+    }
+
+    data class YouTube(val video: YouTubeVideo) : Screen
 }
 
 class MainActivity : ComponentActivity() {
@@ -48,13 +59,14 @@ class MainActivity : ComponentActivity() {
 
                 // Kiosk-simple back-stack: the remote's Back button pops one screen until Home,
                 // then falls through to the system default (exits the app). No Navigation-Compose
-                // needed for a 3-screen graph with no deep links.
+                // needed for a small screen graph with no deep links.
                 BackHandler(enabled = backStack.size > 1) {
                     saveableStateHolder.removeState(backStack.last().toString())
                     backStack = backStack.dropLast(1)
                 }
 
                 val current = backStack.last()
+                val push = { screen: Screen -> backStack = backStack + screen }
                 // Keeps each screen's rememberSaveable state (e.g. the selected film) while it's
                 // covered by a screen pushed on top of it.
                 saveableStateHolder.SaveableStateProvider(current.toString()) {
@@ -63,19 +75,38 @@ class MainActivity : ComponentActivity() {
                             filmLibrary = filmLibrary,
                             playbackPositionRepository = playbackPositionRepository,
                             thumbnails = thumbnails,
-                            onOpenFilms = { backStack = backStack + Screen.Library },
-                            onPlay = { watchable, uri -> backStack = backStack + Screen.Player(watchable, uri) },
+                            onOpen = { destination ->
+                                when (destination) {
+                                    HomeDestination.Films -> push(Screen.Library)
+                                    HomeDestination.Appendices -> push(Screen.Appendices)
+                                    else -> Unit
+                                }
+                            },
+                            onPlay = { watchable, uri -> push(Screen.Player(watchable, uri)) },
                         )
                         Screen.Library -> LibraryScreen(
                             storageRepository = storageRepository,
                             filmLibrary = filmLibrary,
                             playbackPositionRepository = playbackPositionRepository,
                             thumbnails = thumbnails,
-                            onPlay = { watchable, uri -> backStack = backStack + Screen.Player(watchable, uri) },
+                            onPlay = { watchable, uri -> push(Screen.Player(watchable, uri)) },
+                        )
+                        Screen.Appendices -> AppendicesScreen(
+                            filmLibrary = filmLibrary,
+                            playbackPositionRepository = playbackPositionRepository,
+                            thumbnails = thumbnails,
+                            onPlayVideo = { push(Screen.YouTube(it)) },
+                            onPlayExtra = { push(Screen.Player(it.id, it.title, it.file.uri, markLastWatched = false)) },
                         )
                         is Screen.Player -> PlayerScreen(
-                            watchable = current.watchable,
+                            id = current.id,
+                            title = current.title,
                             uri = current.uri,
+                            markLastWatched = current.markLastWatched,
+                            playbackPositionRepository = playbackPositionRepository,
+                        )
+                        is Screen.YouTube -> YouTubePlayerScreen(
+                            video = current.video,
                             playbackPositionRepository = playbackPositionRepository,
                         )
                     }

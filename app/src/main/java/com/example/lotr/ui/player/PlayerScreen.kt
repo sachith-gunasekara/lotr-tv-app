@@ -49,7 +49,6 @@ import androidx.media3.ui.compose.PlayerSurface
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.example.lotr.data.PlaybackPositionRepository
-import com.example.lotr.data.model.Watchable
 import com.example.lotr.ui.components.formatPlaybackTime
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -59,11 +58,17 @@ import kotlinx.coroutines.runBlocking
 private const val SEEK_STEP_MS = 10_000L
 private const val OVERLAY_TIMEOUT_MS = 3_000L
 
+/**
+ * Plays a video file full screen, resuming where [id] was left. [markLastWatched] is for films and
+ * episodes (the Home banner follows them), not extras.
+ */
 @OptIn(UnstableApi::class)
 @Composable
 fun PlayerScreen(
-    watchable: Watchable,
+    id: String,
+    title: String,
     uri: Uri,
+    markLastWatched: Boolean,
     playbackPositionRepository: PlaybackPositionRepository,
     modifier: Modifier = Modifier,
 ) {
@@ -80,14 +85,14 @@ fun PlayerScreen(
     var interaction by remember { mutableIntStateOf(0) }
     var overlayVisible by remember { mutableStateOf(true) }
 
-    LaunchedEffect(watchable.id, uri) {
-        val startPositionMs = playbackPositionRepository.positionMs(watchable.id).first()
+    LaunchedEffect(id, uri) {
+        val startPositionMs = playbackPositionRepository.positionMs(id).first()
         exoPlayer.setMediaItem(MediaItem.fromUri(uri))
         exoPlayer.prepare()
         if (startPositionMs > 0) exoPlayer.seekTo(startPositionMs)
         exoPlayer.play()
-        // Record it as last watched straight away, so Home's banner follows what's playing.
-        playbackPositionRepository.saveProgress(watchable.id, startPositionMs, durationMs = 0)
+        // Record it straight away, so Home's banner follows what's playing.
+        playbackPositionRepository.saveProgress(id, startPositionMs, durationMs = 0, markLastWatched)
     }
 
     LaunchedEffect(exoPlayer) {
@@ -124,7 +129,7 @@ fun PlayerScreen(
 
         val lifecycleObserver = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_PAUSE) {
-                scope.launch { playbackPositionRepository.saveProgress(watchable.id, resumePosition(), exoPlayer.duration.coerceAtLeast(0)) }
+                scope.launch { playbackPositionRepository.saveProgress(id, resumePosition(), exoPlayer.duration.coerceAtLeast(0), markLastWatched) }
             }
         }
         lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
@@ -134,7 +139,7 @@ fun PlayerScreen(
             exoPlayer.removeListener(playerListener)
             // scope is torn down alongside this composable, so the final save can't rely on
             // it outliving this callback; block briefly instead for a single Preferences write.
-            runBlocking { playbackPositionRepository.saveProgress(watchable.id, resumePosition(), exoPlayer.duration.coerceAtLeast(0)) }
+            runBlocking { playbackPositionRepository.saveProgress(id, resumePosition(), exoPlayer.duration.coerceAtLeast(0), markLastWatched) }
             exoPlayer.release()
         }
     }
@@ -179,10 +184,15 @@ fun PlayerScreen(
 
         val currentError = error
         if (currentError != null) {
-            PlaybackErrorMessage(currentError, Modifier.align(Alignment.Center))
+            val isDecoderProblem = currentError.errorCode in 4000..4999
+            PlayerMessage(
+                title = if (isDecoderProblem) "This device can't decode this video" else "This video couldn't be played",
+                detail = "${currentError.errorCodeName} · Press Back to return",
+                modifier = Modifier.align(Alignment.Center),
+            )
         } else if (overlayVisible) {
             PlayerOverlay(
-                title = watchable.title,
+                title = title,
                 isPlaying = isPlaying,
                 positionMs = positionMs,
                 durationMs = durationMs,
@@ -192,8 +202,9 @@ fun PlayerScreen(
     }
 }
 
+/** Title, progress bar, time and remote hints along the bottom - shared by both players. */
 @Composable
-private fun PlayerOverlay(
+internal fun PlayerOverlay(
     title: String,
     isPlaying: Boolean,
     positionMs: Long,
@@ -239,17 +250,17 @@ private fun PlayerOverlay(
     }
 }
 
+/** A centred message over the black player, e.g. when a video can't be played. */
 @Composable
-private fun PlaybackErrorMessage(error: PlaybackException, modifier: Modifier = Modifier) {
-    val isDecoderProblem = error.errorCode in 4000..4999
+internal fun PlayerMessage(title: String, detail: String, modifier: Modifier = Modifier) {
     Column(modifier = modifier.padding(48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            text = if (isDecoderProblem) "This device can't decode this video" else "This video couldn't be played",
+            text = title,
             color = MaterialTheme.colorScheme.primary,
             style = MaterialTheme.typography.headlineSmall,
         )
         Text(
-            text = "${error.errorCodeName} · Press Back to return",
+            text = detail,
             color = Color.White.copy(alpha = 0.7f),
             style = MaterialTheme.typography.bodyMedium,
         )

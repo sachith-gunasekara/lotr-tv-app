@@ -28,10 +28,15 @@ LOTR/
 ├── The Rings of Power/
 │   ├── Season 1/…Rings.of.Power.S01E01….mkv      (also: 1x01, "Episode 01", "01 - Title")
 │   └── Season 2/…
-└── Trailers/                                        (optional)
-    ├── Fellowship of the Ring trailer.mp4           played on the Home banner, with sound
-    └── The Rings of Power trailer.mp4
+├── Trailers/                                        (optional)
+│   ├── Fellowship of the Ring trailer.mp4           played on the Home banner, with sound
+│   └── The Rings of Power trailer.mp4
+└── Appendices/                                      (optional; also "Extras", "Bonus", …)
+    └── Disc 1 - From Book to Vision/…mkv            shown first in Appendices
 ```
+
+**Appendices** also streams the extended editions' behind-the-scenes documentaries from YouTube,
+so the TV needs to be online for those.
 
 Without trailers, the Home banner plays a silent loop of the film itself. To test with files
 somewhere else, use **The Films → Change folder**.
