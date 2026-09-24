@@ -46,6 +46,7 @@ import com.example.lotr.data.AtlasMap
 import com.example.lotr.data.FilmLibrary
 import com.example.lotr.data.Journey
 import com.example.lotr.data.MapTileRepository
+import com.example.lotr.data.PictureFolder
 import com.example.lotr.data.StorageRepository
 import com.example.lotr.data.readableName
 import com.example.lotr.ui.components.DetailsPanel
@@ -104,7 +105,7 @@ fun VaultScreen(
     // Null until the drive has been looked at, so focus isn't placed before the Artwork shelf exists.
     val scanned by produceState<List<File>?>(null, scan?.folder, imageGrants) {
         val folder = scan?.folder
-        value = if (folder != null && storageRepository.hasImagePermission()) storageRepository.artwork(folder) else emptyList()
+        value = if (folder != null && storageRepository.hasImagePermission()) storageRepository.pictures(folder, PictureFolder.Art) else emptyList()
     }
     val artwork = scanned.orEmpty()
 

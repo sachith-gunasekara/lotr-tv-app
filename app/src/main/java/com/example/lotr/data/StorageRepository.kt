@@ -56,11 +56,11 @@ class StorageRepository(private val context: Context) {
     fun hasImagePermission(): Boolean =
         ContextCompat.checkSelfPermission(context, imagePermission) == PackageManager.PERMISSION_GRANTED
 
-    /** Pictures under an "Art"/"Artwork"/"Gallery"/... folder in [folder], in name order. */
-    suspend fun artwork(folder: File): List<File> = withContext(Dispatchers.IO) {
+    /** Pictures under a [kind] folder (e.g. "Art", "Letters") in [folder], in name order. */
+    suspend fun pictures(folder: File, kind: PictureFolder): List<File> = withContext(Dispatchers.IO) {
         folder.walkTopDown()
             .maxDepth(MAX_SCAN_DEPTH)
-            .filter { it.isFile && it.extension.lowercase() in IMAGE_EXTENSIONS && artFolderOf(it, folder) != null }
+            .filter { it.isFile && it.extension.lowercase() in IMAGE_EXTENSIONS && pictureFolderOf(it, folder, kind) != null }
             .sortedBy { it.path.lowercase() }
             .toList()
     }
@@ -163,13 +163,21 @@ fun readableName(name: String): String =
 
 private val EXTRAS_FOLDER = Regex("appendi|extras|bonus|behind.the.scenes|featurettes|special.features", RegexOption.IGNORE_CASE)
 
-private val ART_FOLDER = Regex("^(art|artwork|artworks|gallery|pictures|images|vault|concept art|posters)$", RegexOption.IGNORE_CASE)
+/** Folders of pictures on the drive, recognised by their whole name. */
+enum class PictureFolder(internal val names: Regex) {
+    /** The Vault's artwork. */
+    Art(Regex("^(art|artwork|artworks|gallery|pictures|images|vault|concept art|posters)$", RegexOption.IGNORE_CASE)),
+
+    /** Reading's letters: scans or photos of letters, notes and cards. */
+    Letters(Regex("^(letters|letter|notes|cards|reading)$", RegexOption.IGNORE_CASE)),
+}
 
 /** The outermost "Appendices"/"Extras"/... folder [file] is in, below [root]; null if none. */
 internal fun extrasFolderOf(file: File, root: File): File? = outermostFolder(file, root, EXTRAS_FOLDER::containsMatchIn)
 
-/** The outermost "Art"/"Artwork"/"Gallery"/... folder [file] is in, below [root]; null if none. */
-internal fun artFolderOf(file: File, root: File): File? = outermostFolder(file, root) { ART_FOLDER.matches(it.trim()) }
+/** The outermost [kind] folder (e.g. "Art", "Letters") [file] is in, below [root]; null if none. */
+internal fun pictureFolderOf(file: File, root: File, kind: PictureFolder): File? =
+    outermostFolder(file, root) { kind.names.matches(it.trim()) }
 
 private fun outermostFolder(file: File, root: File, matches: (String) -> Boolean): File? =
     generateSequence(file.parentFile) { it.parentFile }

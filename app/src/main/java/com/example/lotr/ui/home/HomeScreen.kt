@@ -57,7 +57,7 @@ private val sections = listOf(
     Section("The Films", "Trilogy & series", R.drawable.ic_movie, TileEarth, HomeDestination.Films, available = true, art = R.drawable.backdrop_return_of_the_king),
     Section("Appendices", "Behind the scenes", R.drawable.ic_videocam, TileRiver, HomeDestination.Appendices, available = true),
     Section("The Vault", "Maps & artwork", R.drawable.ic_explore, TileMoss, HomeDestination.Vault, available = true),
-    Section("Reading", "Letters & languages", R.drawable.ic_menu_book, TileEmber, HomeDestination.Reading, available = false),
+    Section("Reading", "Letters & languages", R.drawable.ic_menu_book, TileEmber, HomeDestination.Reading, available = true),
     Section("Music", "Scores & soundtrack", R.drawable.ic_music_note, TileTwilight, HomeDestination.Music, available = false),
 )
 

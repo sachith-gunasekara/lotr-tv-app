@@ -26,6 +26,8 @@ import com.example.lotr.ui.library.LibraryScreen
 import com.example.lotr.ui.home.HomeScreen
 import com.example.lotr.ui.player.PlayerScreen
 import com.example.lotr.ui.player.YouTubePlayerScreen
+import com.example.lotr.ui.reading.ReaderScreen
+import com.example.lotr.ui.reading.ReadingScreen
 import com.example.lotr.ui.vault.MapScreen
 import com.example.lotr.ui.vault.VaultScreen
 import java.io.File
@@ -40,8 +42,13 @@ private sealed interface Screen {
     /** A map from the atlas, explored freely or along [journeyId]. */
     data class Map(val mapId: String, val journeyId: String? = null) : Screen
 
-    /** Pictures from the drive, opened at [index]. */
-    data class Pictures(val files: List<File>, val index: Int) : Screen
+    data object Reading : Screen
+
+    /** A text from the Reading room: [index] on shelf [shelf]. */
+    data class Reader(val shelf: Int, val index: Int) : Screen
+
+    /** Pictures from the drive, opened at [index]; [folder] says where they came from. */
+    data class Pictures(val files: List<File>, val index: Int, val folder: String) : Screen
 
     /** A video file; [markLastWatched] for films and episodes, which the Home banner follows. */
     data class Player(val id: String, val title: String, val uri: Uri, val markLastWatched: Boolean) : Screen {
@@ -94,6 +101,7 @@ class MainActivity : ComponentActivity() {
                                     HomeDestination.Films -> push(Screen.Library)
                                     HomeDestination.Appendices -> push(Screen.Appendices)
                                     HomeDestination.Vault -> push(Screen.Vault)
+                                    HomeDestination.Reading -> push(Screen.Reading)
                                     else -> Unit
                                 }
                             },
@@ -119,8 +127,16 @@ class MainActivity : ComponentActivity() {
                             tiles = mapTiles,
                             onOpenMap = { push(Screen.Map(it.id)) },
                             onFollowJourney = { push(Screen.Map(Atlas.middleEarth.id, it.id)) },
-                            onOpenPicture = { files, index -> push(Screen.Pictures(files, index)) },
+                            onOpenPicture = { files, index -> push(Screen.Pictures(files, index, folder = "Art")) },
                         )
+                        Screen.Reading -> ReadingScreen(
+                            storageRepository = storageRepository,
+                            filmLibrary = filmLibrary,
+                            tiles = mapTiles,
+                            onRead = { shelf, index -> push(Screen.Reader(shelf, index)) },
+                            onOpenLetter = { files, index -> push(Screen.Pictures(files, index, folder = "Letters")) },
+                        )
+                        is Screen.Reader -> ReaderScreen(shelfIndex = current.shelf, startIndex = current.index)
                         is Screen.Map -> {
                             val map = Atlas.map(current.mapId)
                             MapScreen(
@@ -135,14 +151,14 @@ class MainActivity : ComponentActivity() {
                             val file = current.files[current.index]
                             MapScreen(
                                 title = readableName(file.nameWithoutExtension),
-                                credit = "${current.index + 1} of ${current.files.size}  ·  from the Art folder on the USB drive",
+                                credit = "${current.index + 1} of ${current.files.size}  ·  from the ${current.folder} folder on the USB drive",
                                 source = remember(file) { mapTiles.picture(file) },
                                 places = emptyList(),
                                 journey = null,
                                 // Leafing through replaces this screen, so Back still returns to the Vault.
                                 onStep = { delta ->
                                     val next = (current.index + delta).mod(current.files.size)
-                                    backStack = backStack.dropLast(1) + Screen.Pictures(current.files, next)
+                                    backStack = backStack.dropLast(1) + current.copy(index = next)
                                 },
                             )
                         }
