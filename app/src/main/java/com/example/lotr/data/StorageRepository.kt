@@ -48,6 +48,23 @@ class StorageRepository(private val context: Context) {
     fun hasReadPermission(): Boolean =
         ContextCompat.checkSelfPermission(context, readPermission) == PackageManager.PERMISSION_GRANTED
 
+    /** Pictures for the Vault's artwork need their own permission from Android 13 on. */
+    val imagePermission: String =
+        if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES
+        else Manifest.permission.READ_EXTERNAL_STORAGE
+
+    fun hasImagePermission(): Boolean =
+        ContextCompat.checkSelfPermission(context, imagePermission) == PackageManager.PERMISSION_GRANTED
+
+    /** Pictures under an "Art"/"Artwork"/"Gallery"/... folder in [folder], in name order. */
+    suspend fun artwork(folder: File): List<File> = withContext(Dispatchers.IO) {
+        folder.walkTopDown()
+            .maxDepth(MAX_SCAN_DEPTH)
+            .filter { it.isFile && it.extension.lowercase() in IMAGE_EXTENSIONS && artFolderOf(it, folder) != null }
+            .sortedBy { it.path.lowercase() }
+            .toList()
+    }
+
     /** Null means "use the pendrive's LOTR folder". */
     val customFolder: Flow<File?> = context.appDataStore.data.map { prefs ->
         prefs[CUSTOM_FOLDER_KEY]?.let(::File)
@@ -135,18 +152,26 @@ class StorageRepository(private val context: Context) {
         const val USB_FOLDER_NAME = "LOTR"
         const val MAX_SCAN_DEPTH = 4
         val VIDEO_EXTENSIONS = setOf("mkv", "mp4", "m4v", "mov", "avi", "webm", "ts")
+        val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp")
         val CUSTOM_FOLDER_KEY = stringPreferencesKey("custom_folder_path")
     }
 }
 
 /** `The.Road.Goes_Ever-On` -> `The Road Goes Ever-On`: dots and underscores to spaces. */
-internal fun readableName(name: String): String =
+fun readableName(name: String): String =
     name.replace('.', ' ').replace('_', ' ').replace(Regex("\\s+"), " ").trim()
 
 private val EXTRAS_FOLDER = Regex("appendi|extras|bonus|behind.the.scenes|featurettes|special.features", RegexOption.IGNORE_CASE)
 
+private val ART_FOLDER = Regex("^(art|artwork|artworks|gallery|pictures|images|vault|concept art|posters)$", RegexOption.IGNORE_CASE)
+
 /** The outermost "Appendices"/"Extras"/... folder [file] is in, below [root]; null if none. */
-internal fun extrasFolderOf(file: File, root: File): File? =
+internal fun extrasFolderOf(file: File, root: File): File? = outermostFolder(file, root, EXTRAS_FOLDER::containsMatchIn)
+
+/** The outermost "Art"/"Artwork"/"Gallery"/... folder [file] is in, below [root]; null if none. */
+internal fun artFolderOf(file: File, root: File): File? = outermostFolder(file, root) { ART_FOLDER.matches(it.trim()) }
+
+private fun outermostFolder(file: File, root: File, matches: (String) -> Boolean): File? =
     generateSequence(file.parentFile) { it.parentFile }
         .takeWhile { it != root }
-        .lastOrNull { EXTRAS_FOLDER.containsMatchIn(it.name) }
+        .lastOrNull { matches(it.name) }
