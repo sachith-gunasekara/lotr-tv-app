@@ -14,21 +14,23 @@ import androidx.lifecycle.lifecycleScope
 import com.example.lotr.data.FilmLibrary
 import com.example.lotr.data.PlaybackPositionRepository
 import com.example.lotr.data.StorageRepository
+import com.example.lotr.data.ThumbnailRepository
 import com.example.lotr.data.model.Watchable
-import com.example.lotr.ui.films.FilmsScreen
+import com.example.lotr.ui.library.LibraryScreen
 import com.example.lotr.ui.home.HomeScreen
 import com.example.lotr.ui.player.PlayerScreen
 import com.example.lotr.ui.theme.LotrTheme
 
 private sealed interface Screen {
     data object Home : Screen
-    data object Films : Screen
+    data object Library : Screen
     data class Player(val watchable: Watchable, val uri: Uri) : Screen
 }
 
 class MainActivity : ComponentActivity() {
     private val storageRepository by lazy { StorageRepository(applicationContext) }
     private val filmLibrary by lazy { FilmLibrary(storageRepository, lifecycleScope) }
+    private val thumbnails by lazy { ThumbnailRepository(applicationContext) }
 
     override fun onResume() {
         super.onResume()
@@ -60,13 +62,14 @@ class MainActivity : ComponentActivity() {
                         Screen.Home -> HomeScreen(
                             filmLibrary = filmLibrary,
                             playbackPositionRepository = playbackPositionRepository,
-                            onOpenFilms = { backStack = backStack + Screen.Films },
+                            onOpenFilms = { backStack = backStack + Screen.Library },
                             onPlay = { watchable, uri -> backStack = backStack + Screen.Player(watchable, uri) },
                         )
-                        Screen.Films -> FilmsScreen(
+                        Screen.Library -> LibraryScreen(
                             storageRepository = storageRepository,
                             filmLibrary = filmLibrary,
                             playbackPositionRepository = playbackPositionRepository,
+                            thumbnails = thumbnails,
                             onPlay = { watchable, uri -> backStack = backStack + Screen.Player(watchable, uri) },
                         )
                         is Screen.Player -> PlayerScreen(
