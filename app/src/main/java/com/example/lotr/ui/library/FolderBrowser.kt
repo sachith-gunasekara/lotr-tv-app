@@ -1,4 +1,4 @@
-package com.example.lotr.ui.films
+package com.example.lotr.ui.library
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement

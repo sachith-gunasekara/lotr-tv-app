@@ -17,3 +17,7 @@ val TileRiver = Color(0xFF1F3A3D)
 val TileMoss = Color(0xFF363A22)
 val TileEmber = Color(0xFF4F2A1C)
 val TileTwilight = Color(0xFF392545)
+
+// Soft amber of late sunlight, for focus glows and haze.
+val LotrAmberGlow = Color(0xCCE8A94A)
+val LotrSunHaze = Color(0xFFF3C877)
