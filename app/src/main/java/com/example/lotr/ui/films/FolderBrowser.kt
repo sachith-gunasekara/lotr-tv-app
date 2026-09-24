@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -73,7 +74,10 @@ fun FolderBrowser(
             style = MaterialTheme.typography.bodyMedium,
         )
         Spacer(Modifier.height(24.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // A fresh list state per level: otherwise the scroll offset carries over from the parent
+        // and "Use this folder" can be off-screen (uncomposed) when focus is requested.
+        val listState = remember(current) { LazyListState() }
+        LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             val dir = current
             if (dir == null) {
                 items(roots) { root ->

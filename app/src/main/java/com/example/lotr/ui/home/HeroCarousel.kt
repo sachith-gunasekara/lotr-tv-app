@@ -164,7 +164,7 @@ private fun HeroSlide(film: Film, file: FilmFile?, resumeAtMs: Long, focused: Bo
             Spacer(Modifier.height(16.dp))
             ActionChip(
                 text = when {
-                    file == null -> "Not on the USB drive yet"
+                    file == null -> "Not found  ·  OK to choose a folder"
                     resumeAtMs > 0 -> "▶  Resume at ${formatPlaybackTime(resumeAtMs)}"
                     else -> "▶  Play"
                 },
