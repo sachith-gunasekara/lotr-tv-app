@@ -223,9 +223,9 @@ private fun Shelves(
                     modifier = Modifier.padding(start = 48.dp, top = 8.dp, bottom = 40.dp).width(640.dp),
                 )
             } else {
-                Shelf(
-                    items = episodes,
-                    initialIndex = episodes.indexOfFirst { it.id == focused.id }.coerceAtLeast(0),
+                EpisodeShelf(
+                    episodes = episodes,
+                    focusedId = focused.id,
                 ) { episode ->
                     WatchableCard(
                         watchable = episode,
@@ -240,6 +240,46 @@ private fun Shelves(
                     ) { EpisodeArt(episode, thumbnails) }
                 }
             }
+        }
+    }
+}
+
+/** Episodes in season order, each season's run introduced by a small marker. */
+@Composable
+private fun EpisodeShelf(episodes: List<Episode>, focusedId: String, card: @Composable (Episode) -> Unit) {
+    val bySeason = episodes.groupBy { it.season }.toSortedMap()
+    // Index in the row (markers included) of the card that gets initial focus.
+    var index = 0
+    var initialIndex = 0
+    bySeason.forEach { (_, seasonEpisodes) ->
+        index++ // the marker
+        seasonEpisodes.forEach { if (it.id == focusedId) initialIndex = index; index++ }
+    }
+    val state = remember { LazyListState(firstVisibleItemIndex = (initialIndex - 1).coerceAtLeast(0)) }
+    LazyRow(
+        state = state,
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        contentPadding = PaddingValues(horizontal = 48.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        bySeason.forEach { (season, seasonEpisodes) ->
+            item(key = "season_$season") { SeasonMarker(season, onDrive = seasonEpisodes.size) }
+            items(seasonEpisodes, key = { it.id }) { card(it) }
+        }
+    }
+}
+
+@Composable
+private fun SeasonMarker(season: Int, onDrive: Int) {
+    val info = RingsOfPower.season(season)
+    Column(Modifier.width(92.dp)) {
+        Text("Season $season", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall)
+        info?.let {
+            Text(
+                text = "${it.year}  ·  $onDrive of ${it.episodes.size}",
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f),
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }
@@ -423,7 +463,9 @@ private fun DetailsPanel(
         Text(
             text = when (watchable) {
                 is Film -> "The Lord of the Rings"
-                is Episode -> "${RingsOfPower.TITLE}  ·  Season ${watchable.season}, Episode ${watchable.number}"
+                is Episode -> "${RingsOfPower.TITLE}  ·  Season ${watchable.season}" +
+                    (RingsOfPower.season(watchable.season)?.let { " (${it.year})" } ?: "") +
+                    ", Episode ${watchable.number}"
             },
             color = MaterialTheme.colorScheme.primary,
             style = MaterialTheme.typography.labelLarge,
@@ -449,7 +491,7 @@ private fun DetailsPanel(
         Text(
             text = when (watchable) {
                 is Film -> watchable.synopsis
-                is Episode -> RingsOfPower.SYNOPSIS
+                is Episode -> RingsOfPower.episodeTeaser(watchable.season, watchable.number)
             },
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.9f),
             style = MaterialTheme.typography.bodyLarge,

@@ -167,7 +167,7 @@ fun HeroBanner(
                 Text(
                     text = when (watchable) {
                         is Film -> watchable.synopsis
-                        is Episode -> RingsOfPower.SYNOPSIS
+                        is Episode -> RingsOfPower.episodeTeaser(watchable.season, watchable.number)
                     },
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.9f),
                     style = MaterialTheme.typography.bodyLarge.copy(shadow = TextShadow),

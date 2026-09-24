@@ -6,34 +6,63 @@ import org.junit.Test
 
 class RingsOfPowerTest {
 
+    private fun parse(path: String) = RingsOfPower.seasonAndEpisode(path, path.substringAfterLast('/'))
+
     @Test
-    fun `recognises episodes by folder or file name`() {
-        assertEquals(
-            1 to 3,
-            RingsOfPower.seasonAndEpisode("/LOTR/The Rings of Power/Season 1/S01E03.mkv", "S01E03.mkv"),
-        )
-        assertEquals(
-            2 to 8,
-            RingsOfPower.seasonAndEpisode(
-                "/LOTR/The.Lord.of.the.Rings.The.Rings.of.Power.S02E08.2160p.mkv",
-                "The.Lord.of.the.Rings.The.Rings.of.Power.S02E08.2160p.mkv",
-            ),
-        )
+    fun `recognises the common episode naming styles`() {
+        assertEquals(1 to 3, parse("/LOTR/The Rings of Power/Season 1/S01E03.mkv"))
+        assertEquals(2 to 8, parse("/LOTR/The.Lord.of.the.Rings.The.Rings.of.Power.S02E08.2160p.AMZN.WEB-DL.mkv"))
+        assertEquals(1 to 3, parse("/LOTR/Rings of Power/rings.of.power.s1e3.mkv"))
+        assertEquals(1 to 3, parse("/LOTR/Rings of Power/Rings of Power S01 E03.mkv"))
+        assertEquals(2 to 5, parse("/LOTR/Rings of Power/Rings of Power 2x05.mkv"))
+        assertEquals(1 to 3, parse("/LOTR/The Rings of Power/Season 1/Episode 03.mkv"))
+        assertEquals(3 to 4, parse("/LOTR/The Rings of Power/Season 3/04 - The Fourth.mkv"))
+        assertEquals(2 to 1, parse("/LOTR/Rings of Power/S02/E01.mp4"))
+    }
+
+    @Test
+    fun `resolution and codec numbers are not mistaken for episodes`() {
+        assertEquals(1 to 3, parse("/LOTR/Rings of Power/Season 1/Episode 3 2160p x265.mkv"))
+        assertNull(parse("/LOTR/Rings of Power/Season 1/2160p.x265.mkv"))
     }
 
     @Test
     fun `ignores films and unrelated series`() {
-        assertNull(RingsOfPower.seasonAndEpisode("/LOTR/Fellowship/fellowship.mkv", "fellowship.mkv"))
-        assertNull(RingsOfPower.seasonAndEpisode("/LOTR/Other.Show.S01E01.mkv", "Other.Show.S01E01.mkv"))
+        assertNull(parse("/LOTR/Fellowship/fellowship.mkv"))
+        assertNull(parse("/LOTR/Other.Show.S01E01.mkv"))
     }
 
     @Test
-    fun `titles come from the known list, then the filename, then a fallback`() {
-        assertEquals("Adar", RingsOfPower.episodeTitle(1, 3, "Rings.of.Power.S01E03.2160p.mkv"))
+    fun `episodes order numerically by season then episode`() {
+        val files = listOf(
+            "/LOTR/Rings of Power/S02E01.mkv",
+            "/LOTR/Rings of Power/S01E10.mkv",
+            "/LOTR/Rings of Power/S01E02.mkv",
+            "/LOTR/Rings of Power/S01E09.mkv",
+        )
+        val ordered = files.mapNotNull(::parse).sortedWith(compareBy({ it.first }, { it.second }))
+        assertEquals(listOf(1 to 2, 1 to 9, 1 to 10, 2 to 1), ordered)
+    }
+
+    @Test
+    fun `season two titles are in broadcast order`() {
+        assertEquals("Where the Stars Are Strange", RingsOfPower.episodeTitle(2, 2, "S02E02.mkv"))
+        assertEquals("Where Is He?", RingsOfPower.episodeTitle(2, 6, "S02E06.mkv"))
+        assertEquals("Shadow and Flame", RingsOfPower.episodeTitle(2, 8, "S02E08.mkv"))
+    }
+
+    @Test
+    fun `unannounced season three titles come from the filename, else a fallback`() {
         assertEquals(
             "The Council of Eregion",
             RingsOfPower.episodeTitle(3, 1, "Rings.of.Power.S03E01.The.Council.of.Eregion.2160p.AMZN.WEB-DL.mkv"),
         )
+        assertEquals("The Fourth", RingsOfPower.episodeTitle(3, 4, "04 - The Fourth.mkv"))
         assertEquals("Episode 2", RingsOfPower.episodeTitle(3, 2, "Rings.of.Power.S03E02.2160p.mkv"))
+    }
+
+    @Test
+    fun `teasers fall back to the season premise`() {
+        assertEquals(RingsOfPower.season(3)!!.premise, RingsOfPower.episodeTeaser(3, 1))
     }
 }
