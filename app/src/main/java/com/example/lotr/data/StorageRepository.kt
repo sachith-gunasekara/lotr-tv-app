@@ -10,6 +10,8 @@ import androidx.core.content.ContextCompat
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.example.lotr.data.model.Film
+import com.example.lotr.data.model.FilmFile
+import com.example.lotr.data.model.ReleaseTags
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -67,14 +69,15 @@ class StorageRepository(private val context: Context) {
     }
 
     /** Searches [folder] and its subfolders (e.g. one folder per film) for each film's video file. */
-    suspend fun findFilmUris(folder: File, films: List<Film> = FilmRepository.films): Map<String, Uri> =
+    suspend fun findFilmFiles(folder: File, films: List<Film> = FilmRepository.films): Map<String, FilmFile> =
         withContext(Dispatchers.IO) {
             val videos = folder.walkTopDown()
                 .maxDepth(MAX_SCAN_DEPTH)
                 .filter { it.isFile && it.extension.lowercase() in VIDEO_EXTENSIONS }
                 .toList()
             films.mapNotNull { film ->
-                videos.firstOrNull { film.matches(it.name) }?.let { film.id to Uri.fromFile(it) }
+                videos.firstOrNull { film.matches(it.name) }
+                    ?.let { film.id to FilmFile(Uri.fromFile(it), ReleaseTags.parse(it.name)) }
             }.toMap()
         }
 

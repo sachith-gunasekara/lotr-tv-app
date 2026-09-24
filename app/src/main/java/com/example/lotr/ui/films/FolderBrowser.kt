@@ -1,7 +1,6 @@
 package com.example.lotr.ui.films
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -27,6 +26,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.example.lotr.data.StorageRoot
 import com.example.lotr.ui.components.LotrButton
+import com.example.lotr.ui.components.lotrBackground
 import java.io.File
 
 /**
@@ -59,7 +59,7 @@ fun FolderBrowser(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .lotrBackground()
             .padding(48.dp),
     ) {
         Text(

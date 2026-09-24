@@ -13,12 +13,15 @@ private val LotrColorScheme = darkColorScheme(
     onBackground = LotrOnBackground,
     surface = LotrSurface,
     onSurface = LotrOnBackground,
+    surfaceVariant = LotrSurfaceVariant,
+    onSurfaceVariant = LotrOnBackground,
 )
 
 @Composable
 fun LotrTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = LotrColorScheme,
+        typography = LotrTypography,
         content = content,
     )
 }
