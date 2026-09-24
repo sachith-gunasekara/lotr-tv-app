@@ -1,6 +1,7 @@
 package com.example.lotr.ui.player
 
 import android.net.Uri
+import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -42,6 +43,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.compose.PlayerSurface
 import androidx.tv.material3.MaterialTheme
@@ -57,6 +59,7 @@ import kotlinx.coroutines.runBlocking
 private const val SEEK_STEP_MS = 10_000L
 private const val OVERLAY_TIMEOUT_MS = 3_000L
 
+@OptIn(UnstableApi::class)
 @Composable
 fun PlayerScreen(
     watchable: Watchable,

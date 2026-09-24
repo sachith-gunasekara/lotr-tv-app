@@ -1,6 +1,7 @@
 package com.example.lotr.ui.home
 
 import android.net.Uri
+import androidx.annotation.OptIn
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -43,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.compose.ContentFrame
 import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
@@ -233,6 +235,7 @@ private fun ResumeChip(playable: Boolean, progress: WatchProgress) {
     }
 }
 
+@OptIn(UnstableApi::class)
 @Composable
 private fun AmbientPreview(
     preview: Preview,
