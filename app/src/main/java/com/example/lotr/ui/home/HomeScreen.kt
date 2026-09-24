@@ -27,6 +27,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
@@ -51,7 +52,6 @@ import com.example.lotr.ui.theme.TileTwilight
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.Locale
 
 private val sections = listOf(
     Section("The Films", "Trilogy & series", R.drawable.ic_movie, TileEarth, available = true, art = R.drawable.backdrop_return_of_the_king),
@@ -153,8 +153,9 @@ private fun TopBar() {
                 delay(15_000)
             }
         }
+        val locale = LocalConfiguration.current.locales[0]
         Text(
-            text = SimpleDateFormat("EEE d MMMM  ·  h:mm a", Locale.getDefault()).format(now),
+            text = SimpleDateFormat("EEE d MMMM  ·  h:mm a", locale).format(now),
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
             style = MaterialTheme.typography.bodyMedium,
         )
