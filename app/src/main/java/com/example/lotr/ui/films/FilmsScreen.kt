@@ -16,14 +16,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -36,9 +39,11 @@ import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.example.lotr.data.FilmRepository
+import com.example.lotr.data.PlaybackPositionRepository
 import com.example.lotr.data.StorageRepository
 import com.example.lotr.data.model.Film
 import com.example.lotr.ui.components.LotrButton
+import com.example.lotr.ui.components.formatPlaybackTime
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.io.File
@@ -49,6 +54,7 @@ private data class FilmScan(val folder: File?, val isCustom: Boolean, val filmUr
 @Composable
 fun FilmsScreen(
     storageRepository: StorageRepository,
+    playbackPositionRepository: PlaybackPositionRepository,
     onPlay: (Film, Uri) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -88,7 +94,10 @@ fun FilmsScreen(
         return
     }
 
-    var selectedFilm by remember { mutableStateOf(FilmRepository.films.first()) }
+    // Saveable (and MainActivity keeps each screen's saveable state) so returning from the
+    // player lands back on the film that was playing.
+    var selectedFilmId by rememberSaveable { mutableStateOf(FilmRepository.films.first().id) }
+    val selectedFilm = FilmRepository.films.first { it.id == selectedFilmId }
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -113,12 +122,21 @@ fun FilmsScreen(
                     FilmPosterList(
                         films = FilmRepository.films,
                         selectedFilm = selectedFilm,
-                        onSelect = { selectedFilm = it },
+                        onSelect = { selectedFilmId = it.id },
                     )
+                    val resumeAtMs by playbackPositionRepository.positionMs(selectedFilm.id)
+                        .collectAsState(initial = 0L)
                     FilmDetail(
                         film = selectedFilm,
                         playableUri = current.filmUris[selectedFilm.id],
+                        resumeAtMs = resumeAtMs,
                         onPlay = onPlay,
+                        onStartOver = { film, uri ->
+                            scope.launch {
+                                playbackPositionRepository.savePosition(film.id, 0)
+                                onPlay(film, uri)
+                            }
+                        },
                     )
                 }
                 SourceBar(
@@ -172,20 +190,24 @@ private fun SourceBar(scan: FilmScan, onChooseFolder: () -> Unit, onUseUsb: () -
 
 @Composable
 private fun FilmPosterList(films: List<Film>, selectedFilm: Film, onSelect: (Film) -> Unit) {
-    val firstItemFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { firstItemFocusRequester.requestFocus() }
+    // Focus starts on the selected film, so coming back from the player lands where you left off.
+    val selectedItemFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        selectedItemFocusRequester.requestFocus()
+    }
 
     LazyColumn(
-        modifier = Modifier.focusRestorer(firstItemFocusRequester),
+        modifier = Modifier.focusRestorer(selectedItemFocusRequester),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        itemsIndexed(films) { index, film ->
+        items(films) { film ->
             val isSelected = film.id == selectedFilm.id
             Card(
                 onClick = { onSelect(film) },
                 modifier = Modifier
                     .size(width = 220.dp, height = 130.dp)
-                    .let { if (index == 0) it.focusRequester(firstItemFocusRequester) else it },
+                    .let { if (isSelected) it.focusRequester(selectedItemFocusRequester) else it },
                 colors = CardDefaults.colors(
                     containerColor = if (isSelected) {
                         MaterialTheme.colorScheme.surface
@@ -218,7 +240,13 @@ private fun FilmPosterList(films: List<Film>, selectedFilm: Film, onSelect: (Fil
 }
 
 @Composable
-private fun FilmDetail(film: Film, playableUri: Uri?, onPlay: (Film, Uri) -> Unit) {
+private fun FilmDetail(
+    film: Film,
+    playableUri: Uri?,
+    resumeAtMs: Long,
+    onPlay: (Film, Uri) -> Unit,
+    onStartOver: (Film, Uri) -> Unit,
+) {
     Column(modifier = Modifier.width(480.dp)) {
         Text(
             text = film.title,
@@ -238,11 +266,22 @@ private fun FilmDetail(film: Film, playableUri: Uri?, onPlay: (Film, Uri) -> Uni
             style = MaterialTheme.typography.bodyLarge,
         )
         Spacer(Modifier.height(24.dp))
-        LotrButton(
-            onClick = { playableUri?.let { onPlay(film, it) } },
-            enabled = playableUri != null,
-        ) {
-            Text(if (playableUri != null) "Play" else "Not found in this folder")
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            LotrButton(
+                onClick = { playableUri?.let { onPlay(film, it) } },
+                enabled = playableUri != null,
+            ) {
+                Text(
+                    when {
+                        playableUri == null -> "Not found in this folder"
+                        resumeAtMs > 0 -> "▶  Resume at ${formatPlaybackTime(resumeAtMs)}"
+                        else -> "▶  Play"
+                    },
+                )
+            }
+            if (playableUri != null && resumeAtMs > 0) {
+                LotrButton(onClick = { onStartOver(film, playableUri) }) { Text("Start over") }
+            }
         }
     }
 }

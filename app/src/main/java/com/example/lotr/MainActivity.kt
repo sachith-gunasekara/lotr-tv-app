@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import com.example.lotr.data.PlaybackPositionRepository
 import com.example.lotr.data.StorageRepository
@@ -30,28 +31,36 @@ class MainActivity : ComponentActivity() {
             LotrTheme {
                 val storageRepository = remember { StorageRepository(applicationContext) }
                 val playbackPositionRepository = remember { PlaybackPositionRepository(applicationContext) }
+                val saveableStateHolder = rememberSaveableStateHolder()
                 var backStack by remember { mutableStateOf(listOf<Screen>(Screen.Home)) }
 
                 // Kiosk-simple back-stack: the remote's Back button pops one screen until Home,
                 // then falls through to the system default (exits the app). No Navigation-Compose
                 // needed for a 3-screen graph with no deep links.
                 BackHandler(enabled = backStack.size > 1) {
+                    saveableStateHolder.removeState(backStack.last().toString())
                     backStack = backStack.dropLast(1)
                 }
 
-                when (val current = backStack.last()) {
-                    Screen.Home -> HomeScreen(
-                        onOpenFilms = { backStack = backStack + Screen.Films },
-                    )
-                    Screen.Films -> FilmsScreen(
-                        storageRepository = storageRepository,
-                        onPlay = { film, uri -> backStack = backStack + Screen.Player(film, uri) },
-                    )
-                    is Screen.Player -> PlayerScreen(
-                        film = current.film,
-                        uri = current.uri,
-                        playbackPositionRepository = playbackPositionRepository,
-                    )
+                val current = backStack.last()
+                // Keeps each screen's rememberSaveable state (e.g. the selected film) while it's
+                // covered by a screen pushed on top of it.
+                saveableStateHolder.SaveableStateProvider(current.toString()) {
+                    when (current) {
+                        Screen.Home -> HomeScreen(
+                            onOpenFilms = { backStack = backStack + Screen.Films },
+                        )
+                        Screen.Films -> FilmsScreen(
+                            storageRepository = storageRepository,
+                            playbackPositionRepository = playbackPositionRepository,
+                            onPlay = { film, uri -> backStack = backStack + Screen.Player(film, uri) },
+                        )
+                        is Screen.Player -> PlayerScreen(
+                            film = current.film,
+                            uri = current.uri,
+                            playbackPositionRepository = playbackPositionRepository,
+                        )
+                    }
                 }
             }
         }
