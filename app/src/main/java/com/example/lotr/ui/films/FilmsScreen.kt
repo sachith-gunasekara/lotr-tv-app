@@ -19,7 +19,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,7 +31,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
-import androidx.tv.material3.Button
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.MaterialTheme
@@ -40,7 +38,13 @@ import androidx.tv.material3.Text
 import com.example.lotr.data.FilmRepository
 import com.example.lotr.data.StorageRepository
 import com.example.lotr.data.model.Film
+import com.example.lotr.ui.components.LotrButton
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.io.File
+
+/** Result of looking for the films: where we looked ([folder] is null if nowhere) and what matched. */
+private data class FilmScan(val folder: File?, val isCustom: Boolean, val filmUris: Map<String, Uri>)
 
 @Composable
 fun FilmsScreen(
@@ -48,40 +52,79 @@ fun FilmsScreen(
     onPlay: (Film, Uri) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val treeUri by storageRepository.treeUri.collectAsState(initial = null)
-    var filmUris by remember { mutableStateOf<Map<String, Uri>>(emptyMap()) }
-    var selectedFilm by remember { mutableStateOf(FilmRepository.films.first()) }
-    val scope = rememberCoroutineScope()
-
-    LaunchedEffect(treeUri) {
-        filmUris = storageRepository.findFilmUris()
+    var hasPermission by remember { mutableStateOf(storageRepository.hasReadPermission()) }
+    val requestPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        hasPermission = it
+    }
+    LaunchedEffect(Unit) {
+        if (!hasPermission) requestPermission.launch(storageRepository.readPermission)
     }
 
-    val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) {
-            scope.launch { storageRepository.persistTreeUri(uri) }
+    var scan by remember { mutableStateOf<FilmScan?>(null) }
+    LaunchedEffect(hasPermission) {
+        if (!hasPermission) return@LaunchedEffect
+        storageRepository.customFolder.collectLatest { custom ->
+            val folder = custom ?: storageRepository.findUsbLotrFolder()
+            scan = FilmScan(
+                folder = folder,
+                isCustom = custom != null,
+                filmUris = folder?.let { storageRepository.findFilmUris(it) }.orEmpty(),
+            )
         }
     }
 
+    var browsing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    if (browsing) {
+        FolderBrowser(
+            roots = remember { storageRepository.storageRoots() },
+            listSubfolders = storageRepository::subfolders,
+            onChoose = { folder ->
+                scope.launch { storageRepository.setCustomFolder(folder) }
+                browsing = false
+            },
+            onCancel = { browsing = false },
+        )
+        return
+    }
+
+    var selectedFilm by remember { mutableStateOf(FilmRepository.films.first()) }
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .padding(48.dp),
     ) {
-        if (treeUri == null) {
-            NoUsbFolderSelected(onSelectFolder = { pickFolder.launch(null) })
-        } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(48.dp)) {
-                FilmPosterList(
-                    films = FilmRepository.films,
-                    selectedFilm = selectedFilm,
-                    onSelect = { selectedFilm = it },
-                )
-                FilmDetail(
-                    film = selectedFilm,
-                    playableUri = filmUris[selectedFilm.id],
-                    onPlay = onPlay,
+        val current = scan
+        when {
+            !hasPermission -> StatusMessage(
+                text = "Allow access to storage so the films can be found on the USB drive.",
+                actionLabel = "Allow access",
+                onAction = { requestPermission.launch(storageRepository.readPermission) },
+            )
+            current == null -> StatusMessage(text = "Looking for the films…")
+            current.folder == null -> StatusMessage(
+                text = "Insert the USB pendrive with a LOTR folder on it, or choose a folder.",
+                actionLabel = "Choose a folder",
+                onAction = { browsing = true },
+            )
+            else -> Column {
+                Row(horizontalArrangement = Arrangement.spacedBy(48.dp), modifier = Modifier.weight(1f)) {
+                    FilmPosterList(
+                        films = FilmRepository.films,
+                        selectedFilm = selectedFilm,
+                        onSelect = { selectedFilm = it },
+                    )
+                    FilmDetail(
+                        film = selectedFilm,
+                        playableUri = current.filmUris[selectedFilm.id],
+                        onPlay = onPlay,
+                    )
+                }
+                SourceBar(
+                    scan = current,
+                    onChooseFolder = { browsing = true },
+                    onUseUsb = { scope.launch { storageRepository.setCustomFolder(null) } },
                 )
             }
         }
@@ -89,9 +132,9 @@ fun FilmsScreen(
 }
 
 @Composable
-private fun NoUsbFolderSelected(onSelectFolder: () -> Unit) {
+private fun StatusMessage(text: String, actionLabel: String? = null, onAction: () -> Unit = {}) {
     val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    if (actionLabel != null) LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -99,14 +142,31 @@ private fun NoUsbFolderSelected(onSelectFolder: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = "Insert the USB pendrive and select its folder to browse the films.",
+            text = text,
             color = MaterialTheme.colorScheme.onBackground,
             style = MaterialTheme.typography.titleMedium,
         )
-        Spacer(Modifier.height(24.dp))
-        Button(onClick = onSelectFolder, modifier = Modifier.focusRequester(focusRequester)) {
-            Text("Select USB folder")
+        if (actionLabel != null) {
+            Spacer(Modifier.height(24.dp))
+            LotrButton(onClick = onAction, modifier = Modifier.focusRequester(focusRequester)) {
+                Text(actionLabel)
+            }
         }
+    }
+}
+
+@Composable
+private fun SourceBar(scan: FilmScan, onChooseFolder: () -> Unit, onUseUsb: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text(
+            text = "${if (scan.isCustom) "Custom folder" else "USB drive"}: ${scan.folder?.path}",
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        LotrButton(onClick = onChooseFolder) { Text("Choose folder") }
+        if (scan.isCustom) LotrButton(onClick = onUseUsb) { Text("Use USB drive") }
     }
 }
 
@@ -178,11 +238,11 @@ private fun FilmDetail(film: Film, playableUri: Uri?, onPlay: (Film, Uri) -> Uni
             style = MaterialTheme.typography.bodyLarge,
         )
         Spacer(Modifier.height(24.dp))
-        Button(
+        LotrButton(
             onClick = { playableUri?.let { onPlay(film, it) } },
             enabled = playableUri != null,
         ) {
-            Text(if (playableUri != null) "Play" else "Not found on USB drive")
+            Text(if (playableUri != null) "Play" else "Not found in this folder")
         }
     }
 }

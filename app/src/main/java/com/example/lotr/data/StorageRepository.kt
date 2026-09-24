@@ -1,50 +1,87 @@
 package com.example.lotr.data
 
+import android.Manifest
 import android.content.Context
-import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
-import androidx.core.net.toUri
+import android.os.Build
+import android.os.Environment
+import androidx.core.content.ContextCompat
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.documentfile.provider.DocumentFile
 import com.example.lotr.data.model.Film
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
+import java.io.File
+
+/** A mounted storage volume's root directory, e.g. internal storage or the USB pendrive. */
+data class StorageRoot(val label: String, val dir: File)
 
 /**
- * Wraps the Storage Access Framework folder the user picked on the USB pendrive: persists the
- * granted tree [Uri] across launches and resolves it back to film-matched content Uris.
+ * Finds the film files. By default that's the `LOTR` folder at the root of the USB pendrive; a
+ * custom folder (persisted) overrides it for testing. Reads files directly with the video-read
+ * permission rather than via the SAF picker, since Android TV builds often ship without one.
  */
 class StorageRepository(private val context: Context) {
 
-    val treeUri: Flow<Uri?> = context.appDataStore.data.map { prefs ->
-        prefs[TREE_URI_KEY]?.toUri()
+    val readPermission: String =
+        if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_VIDEO
+        else Manifest.permission.READ_EXTERNAL_STORAGE
+
+    fun hasReadPermission(): Boolean =
+        ContextCompat.checkSelfPermission(context, readPermission) == PackageManager.PERMISSION_GRANTED
+
+    /** Null means "use the pendrive's LOTR folder". */
+    val customFolder: Flow<File?> = context.appDataStore.data.map { prefs ->
+        prefs[CUSTOM_FOLDER_KEY]?.let(::File)
     }
 
-    /** Call with the Uri returned by an `OpenDocumentTree` picker launch. */
-    suspend fun persistTreeUri(uri: Uri) {
-        context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        context.appDataStore.edit { prefs -> prefs[TREE_URI_KEY] = uri.toString() }
-    }
-
-    fun hasReadAccess(uri: Uri): Boolean =
-        context.contentResolver.persistedUriPermissions.any { it.uri == uri && it.isReadPermission }
-
-    /** Scans the picked folder's direct children and maps each matched [Film.id] to its file Uri. */
-    suspend fun findFilmUris(films: List<Film> = FilmRepository.films): Map<String, Uri> {
-        val uri = treeUri.first() ?: return emptyMap()
-        if (!hasReadAccess(uri)) return emptyMap()
-        val children = DocumentFile.fromTreeUri(context, uri)?.listFiles().orEmpty()
-        return buildMap {
-            for (film in films) {
-                val match = children.firstOrNull { doc -> doc.isFile && doc.name?.let(film::matches) == true }
-                if (match != null) put(film.id, match.uri)
-            }
+    suspend fun setCustomFolder(folder: File?) {
+        context.appDataStore.edit { prefs ->
+            if (folder == null) prefs.remove(CUSTOM_FOLDER_KEY) else prefs[CUSTOM_FOLDER_KEY] = folder.path
         }
     }
 
+    fun storageRoots(): List<StorageRoot> =
+        context.getExternalFilesDirs(null).filterNotNull().map { appDir ->
+            val root = File(appDir.path.substringBefore("/Android/data/"))
+            val label = if (Environment.isExternalStorageRemovable(appDir)) "USB drive (${root.name})" else "Internal storage"
+            StorageRoot(label, root)
+        }
+
+    suspend fun findUsbLotrFolder(): File? = withContext(Dispatchers.IO) {
+        context.getExternalFilesDirs(null).filterNotNull()
+            .filter { Environment.isExternalStorageRemovable(it) }
+            .map { File(it.path.substringBefore("/Android/data/")) }
+            .firstNotNullOfOrNull { root ->
+                root.listFiles()?.firstOrNull { it.isDirectory && it.name.equals(USB_FOLDER_NAME, ignoreCase = true) }
+            }
+    }
+
+    suspend fun subfolders(dir: File): List<File> = withContext(Dispatchers.IO) {
+        dir.listFiles().orEmpty()
+            .filter { it.isDirectory && !it.isHidden }
+            .sortedBy { it.name.lowercase() }
+    }
+
+    /** Searches [folder] and its subfolders (e.g. one folder per film) for each film's video file. */
+    suspend fun findFilmUris(folder: File, films: List<Film> = FilmRepository.films): Map<String, Uri> =
+        withContext(Dispatchers.IO) {
+            val videos = folder.walkTopDown()
+                .maxDepth(MAX_SCAN_DEPTH)
+                .filter { it.isFile && it.extension.lowercase() in VIDEO_EXTENSIONS }
+                .toList()
+            films.mapNotNull { film ->
+                videos.firstOrNull { film.matches(it.name) }?.let { film.id to Uri.fromFile(it) }
+            }.toMap()
+        }
+
     private companion object {
-        val TREE_URI_KEY = stringPreferencesKey("usb_tree_uri")
+        const val USB_FOLDER_NAME = "LOTR"
+        const val MAX_SCAN_DEPTH = 3
+        val VIDEO_EXTENSIONS = setOf("mkv", "mp4", "m4v", "mov", "avi", "webm", "ts")
+        val CUSTOM_FOLDER_KEY = stringPreferencesKey("custom_folder_path")
     }
 }

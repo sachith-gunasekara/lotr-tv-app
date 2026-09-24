@@ -83,6 +83,8 @@ A kiosk-style Android TV home screen (matching the reference mockup) that plays 
 
 ## 4. USB / File Access Plan
 
+> **Superseded while building (PR #8):** the SAF picker approach below was replaced. Android TV builds (including the TV emulator) often have no document-picker app, so the app now reads the pendrive's `LOTR` folder directly with the video-read permission, with an in-app folder browser for a custom folder. The notes below are kept for history.
+
 - On first launch, prompt the user (via `ACTION_OPEN_DOCUMENT_TREE`) to select the folder on the pendrive containing the 3 movie files.
 - Persist the granted URI permission (`takePersistableUriPermission`) so it survives reboots and doesn't need re-granting.
 - On subsequent launches, re-resolve the saved tree URI, scan for the 3 expected filenames (or match by pattern, e.g. `*fellowship*`, `*towers*`, `*return*`), and map them to the hardcoded film metadata.
@@ -131,4 +133,5 @@ A kiosk-style Android TV home screen (matching the reference mockup) that plays 
 - Source images/assets for posters, background art, maps (need to be supplied by you — none are downloaded or included here).
 - Which YouTube videos to curate for "Appendices" (official channel links, or your own picks).
 - Whether "Reading Material" content will be scanned text/PDFs you own, or short custom-written blurbs.
-- **Confirm the Xiaomi TV has a document-picker app** (a file manager implementing `DocumentsProvider`, e.g. a pre-installed "Files" app) for the `ACTION_OPEN_DOCUMENT_TREE` flow in §4 to work at all. Found while building: the stock `Television_1080p` emulator image ships with no such app installed, so the picker intent has nothing to resolve to. Real Xiaomi TV units commonly include one, but this needs verifying on the actual device before relying on it for the birthday build — if it's missing, the fallback is either sideloading a minimal file-manager APK or replacing the folder picker with a manual path/volume scan.
+- ~~Confirm the Xiaomi TV has a document-picker app~~ — resolved: the app no longer depends on the SAF picker; it reads the pendrive's `LOTR` folder directly with the video-read permission (see CLAUDE.md).
+- **Confirm the Xiaomi TV hardware-decodes 4K HEVC Main10** — the films are `x265 10bit` 3840×1610. The TV emulator can't decode them (`NO_EXCEEDS_CAPABILITIES`), so playback of the actual files can only be verified on the TV itself.
