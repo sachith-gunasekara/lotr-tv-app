@@ -35,8 +35,10 @@ LOTR/
 │   └── Disc 1 - From Book to Vision/…mkv            shown first in Appendices
 ├── Art/                                             (optional; also "Artwork", "Gallery", …)
 │   └── Alan Lee - Rivendell.jpg                     shown in The Vault → Artwork
-└── Letters/                                         (optional; also "Notes", "Cards")
-    └── Happy birthday.jpg                           a scan or photo, shown first in Reading
+├── Letters/                                         (optional; also "Notes", "Cards")
+│   └── Happy birthday.jpg                           a scan or photo, shown first in Reading
+└── Music/                                           (optional; also "Soundtrack", "Scores")
+    └── The Fellowship of the Ring/01 The Prophecy.flac   one folder (or album tag) per album
 ```
 
 **The Vault** has the maps built in (a zoomable Middle-earth with its places and the great
@@ -46,6 +48,11 @@ added as Artwork (the app asks for access to pictures the first time).
 **Reading** has a timeline of the War of the Ring, a who's who, the languages of Middle-earth and
 some sayings built in. Letters must be pictures (a scan or a phone photo): Android doesn't let
 apps read text files or PDFs from a USB drive with the permissions this app uses.
+
+**Music** plays the soundtrack from the `Music` folder (mp3, flac, m4a, ogg, opus, wav; tags and
+cover art are read from the files). Its *Themes of the Score* shelf explains Howard Shore's
+leitmotifs and plays the tracks on the drive where each is heard, or, without them, the official
+recording online.
 
 **Appendices** also streams the extended editions' behind-the-scenes documentaries from YouTube,
 so the TV needs to be online for those.

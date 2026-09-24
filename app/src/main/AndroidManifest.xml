@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <!-- The Vault's artwork: pictures in an Art folder on the drive. -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <!-- Music: the soundtrack in a Music folder on the drive. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />

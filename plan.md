@@ -15,7 +15,7 @@ A kiosk-style Android TV home screen (matching the reference mockup) that plays 
 - "The Films" section: browse 3 movies, play from USB, resume position
 - Reliable USB pendrive detection + folder access on Xiaomi Android TV
 
-**V2 (nice-to-have, can follow after MVP):**
+**V2 (built after the MVP — PRs #22–#25):**
 - Appendices (YouTube behind-the-scenes embeds)
 - Digital Vault (map/artbook image viewer)
 - Reading Material (text/PDF viewer)

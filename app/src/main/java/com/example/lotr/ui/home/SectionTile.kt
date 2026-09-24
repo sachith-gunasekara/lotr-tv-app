@@ -9,11 +9,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -29,14 +27,13 @@ import com.example.lotr.ui.components.WarmCard
 /** Where a Home tile leads. */
 enum class HomeDestination { Films, Appendices, Vault, Reading, Music }
 
-/** A Home tile; [available] is false while its section is still to come. */
+/** A Home tile, leading to [destination]. */
 data class Section(
     val title: String,
     val subtitle: String,
     @DrawableRes val icon: Int,
     val tint: Color,
     val destination: HomeDestination,
-    val available: Boolean,
     @DrawableRes val art: Int? = null,
 )
 
@@ -77,19 +74,6 @@ fun SectionTile(section: Section, onClick: () -> Unit, modifier: Modifier = Modi
                 .offset(x = 22.dp, y = (-10).dp)
                 .size(104.dp),
         )
-        if (!section.available) {
-            Text(
-                text = "coming soon",
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f),
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(10.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(Color.Black.copy(alpha = 0.45f))
-                    .padding(horizontal = 10.dp, vertical = 3.dp),
-            )
-        }
         Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 14.dp, vertical = 12.dp)) {
             Text(
                 text = section.title,
