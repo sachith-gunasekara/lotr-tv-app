@@ -33,13 +33,19 @@ LOTR/
 │   └── The Rings of Power trailer.mp4
 ├── Appendices/                                      (optional; also "Extras", "Bonus", …)
 │   └── Disc 1 - From Book to Vision/…mkv            shown first in Appendices
-└── Art/                                             (optional; also "Artwork", "Gallery", …)
-    └── Alan Lee - Rivendell.jpg                     shown in The Vault → Artwork
+├── Art/                                             (optional; also "Artwork", "Gallery", …)
+│   └── Alan Lee - Rivendell.jpg                     shown in The Vault → Artwork
+└── Letters/                                         (optional; also "Notes", "Cards")
+    └── Happy birthday.jpg                           a scan or photo, shown first in Reading
 ```
 
 **The Vault** has the maps built in (a zoomable Middle-earth with its places and the great
 journeys, plus the Shire, the Pelennor, Beleriand and Númenor); pictures in an `Art` folder are
 added as Artwork (the app asks for access to pictures the first time).
+
+**Reading** has a timeline of the War of the Ring, a who's who, the languages of Middle-earth and
+some sayings built in. Letters must be pictures (a scan or a phone photo): Android doesn't let
+apps read text files or PDFs from a USB drive with the permissions this app uses.
 
 **Appendices** also streams the extended editions' behind-the-scenes documentaries from YouTube,
 so the TV needs to be online for those.

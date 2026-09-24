@@ -35,9 +35,11 @@ class ExtrasTest {
 
     @Test
     fun artFoldersAreMatchedByWholeName() {
-        assertEquals("Artwork", artFolderOf(File(root, "Artwork/Alan Lee/bag_end.jpg"), root)?.name)
-        assertEquals("Gallery", artFolderOf(File(root, "Gallery/map.png"), root)?.name)
+        assertEquals("Artwork", pictureFolderOf(File(root, "Artwork/Alan Lee/bag_end.jpg"), root, PictureFolder.Art)?.name)
+        assertEquals("Gallery", pictureFolderOf(File(root, "Gallery/map.png"), root, PictureFolder.Art)?.name)
         // "Smart TV captures" contains "art" but isn't an art folder.
-        assertNull(artFolderOf(File(root, "Smart TV captures/still.png"), root))
+        assertNull(pictureFolderOf(File(root, "Smart TV captures/still.png"), root, PictureFolder.Art))
+        assertEquals("Letters", pictureFolderOf(File(root, "Letters/birthday.jpg"), root, PictureFolder.Letters)?.name)
+        assertNull(pictureFolderOf(File(root, "Art/birthday.jpg"), root, PictureFolder.Letters))
     }
 }
