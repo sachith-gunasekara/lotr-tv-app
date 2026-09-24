@@ -26,11 +26,16 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.example.lotr.ui.components.WarmCard
 
+/** Where a Home tile leads. */
+enum class HomeDestination { Films, Appendices, Vault, Reading, Music }
+
+/** A Home tile; [available] is false while its section is still to come. */
 data class Section(
     val title: String,
     val subtitle: String,
     @DrawableRes val icon: Int,
     val tint: Color,
+    val destination: HomeDestination,
     val available: Boolean,
     @DrawableRes val art: Int? = null,
 )

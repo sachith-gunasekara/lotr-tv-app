@@ -9,6 +9,7 @@ import android.os.Environment
 import androidx.core.content.ContextCompat
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.example.lotr.data.model.DriveExtra
 import com.example.lotr.data.model.Episode
 import com.example.lotr.data.model.Film
 import com.example.lotr.data.model.FilmFile
@@ -20,13 +21,14 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * What a scan found: film files by film id, series episodes in order, and trailers keyed by film
- * id or [RingsOfPower.SERIES_ID] (any video with "trailer" in its name).
+ * What a scan found: film files by film id, series episodes in order, trailers keyed by film id or
+ * [RingsOfPower.SERIES_ID] (any video with "trailer" in its name), and behind-the-scenes extras.
  */
 data class LibraryContents(
     val films: Map<String, FilmFile>,
     val episodes: List<Episode>,
     val trailers: Map<String, FilmFile> = emptyMap(),
+    val extras: List<DriveExtra> = emptyList(),
 )
 
 /** A mounted storage volume's root directory, e.g. internal storage or the USB pendrive. */
@@ -89,7 +91,9 @@ class StorageRepository(private val context: Context) {
                 .maxDepth(MAX_SCAN_DEPTH)
                 .filter { it.isFile && it.extension.lowercase() in VIDEO_EXTENSIONS }
                 .toList()
-            val (trailerFiles, titleFiles) = videos.partition { it.name.contains("trailer", ignoreCase = true) }
+            // Extras first, so an appendix named after a film is never taken for the film.
+            val (extraFiles, featureFiles) = videos.partition { extrasFolderOf(it, folder) != null }
+            val (trailerFiles, titleFiles) = featureFiles.partition { it.name.contains("trailer", ignoreCase = true) }
             val (episodeFiles, filmFiles) = titleFiles.partition {
                 RingsOfPower.seasonAndEpisode(it.path, it.name) != null
             }
@@ -114,6 +118,14 @@ class StorageRepository(private val context: Context) {
                         ?: RingsOfPower.SERIES_ID.takeIf { RingsOfPower.isSeries(file.path) }
                     key?.let { it to file.toFilmFile() }
                 }.toMap(),
+                extras = extraFiles.sortedBy { it.path.lowercase() }.map { file ->
+                    val extrasFolder = extrasFolderOf(file, folder)!!
+                    DriveExtra(
+                        title = readableName(file.nameWithoutExtension),
+                        group = file.parentFile?.takeIf { it != extrasFolder }?.name?.let(::readableName),
+                        file = file.toFilmFile(),
+                    )
+                },
             )
         }
 
@@ -126,3 +138,15 @@ class StorageRepository(private val context: Context) {
         val CUSTOM_FOLDER_KEY = stringPreferencesKey("custom_folder_path")
     }
 }
+
+/** `The.Road.Goes_Ever-On` -> `The Road Goes Ever-On`: dots and underscores to spaces. */
+internal fun readableName(name: String): String =
+    name.replace('.', ' ').replace('_', ' ').replace(Regex("\\s+"), " ").trim()
+
+private val EXTRAS_FOLDER = Regex("appendi|extras|bonus|behind.the.scenes|featurettes|special.features", RegexOption.IGNORE_CASE)
+
+/** The outermost "Appendices"/"Extras"/... folder [file] is in, below [root]; null if none. */
+internal fun extrasFolderOf(file: File, root: File): File? =
+    generateSequence(file.parentFile) { it.parentFile }
+        .takeWhile { it != root }
+        .lastOrNull { EXTRAS_FOLDER.containsMatchIn(it.name) }

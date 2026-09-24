@@ -54,11 +54,11 @@ import java.text.SimpleDateFormat
 import java.util.Date
 
 private val sections = listOf(
-    Section("The Films", "Trilogy & series", R.drawable.ic_movie, TileEarth, available = true, art = R.drawable.backdrop_return_of_the_king),
-    Section("Appendices", "Behind the scenes", R.drawable.ic_videocam, TileRiver, available = false),
-    Section("The Vault", "Maps & artwork", R.drawable.ic_explore, TileMoss, available = false),
-    Section("Reading", "Letters & languages", R.drawable.ic_menu_book, TileEmber, available = false),
-    Section("Music", "Scores & soundtrack", R.drawable.ic_music_note, TileTwilight, available = false),
+    Section("The Films", "Trilogy & series", R.drawable.ic_movie, TileEarth, HomeDestination.Films, available = true, art = R.drawable.backdrop_return_of_the_king),
+    Section("Appendices", "Behind the scenes", R.drawable.ic_videocam, TileRiver, HomeDestination.Appendices, available = true),
+    Section("The Vault", "Maps & artwork", R.drawable.ic_explore, TileMoss, HomeDestination.Vault, available = false),
+    Section("Reading", "Letters & languages", R.drawable.ic_menu_book, TileEmber, HomeDestination.Reading, available = false),
+    Section("Music", "Scores & soundtrack", R.drawable.ic_music_note, TileTwilight, HomeDestination.Music, available = false),
 )
 
 @Composable
@@ -66,7 +66,7 @@ fun HomeScreen(
     filmLibrary: FilmLibrary,
     playbackPositionRepository: PlaybackPositionRepository,
     thumbnails: ThumbnailRepository,
-    onOpenFilms: () -> Unit,
+    onOpen: (HomeDestination) -> Unit,
     onPlay: (Watchable, Uri) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -109,12 +109,12 @@ fun HomeScreen(
             trailer = trailer,
             progress = progress,
             thumbnails = thumbnails,
-            onActivate = { featuredFile?.let { onPlay(featured, it.uri) } ?: onOpenFilms() },
+            onActivate = { featuredFile?.let { onPlay(featured, it.uri) } ?: onOpen(HomeDestination.Films) },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(300.dp)
                 .focusRequester(heroFocus)
-                // Only The Films is live, so Down goes there rather than to the nearest tile.
+                // Down goes to The Films rather than to whichever tile happens to be nearest.
                 .onPreviewKeyEvent { event ->
                     if (event.key != Key.DirectionDown) return@onPreviewKeyEvent false
                     if (event.type == KeyEventType.KeyDown) filmsTileFocus.requestFocus()
@@ -126,10 +126,10 @@ fun HomeScreen(
             sections.forEach { section ->
                 SectionTile(
                     section = section,
-                    onClick = { if (section.available) onOpenFilms() },
+                    onClick = { if (section.available) onOpen(section.destination) },
                     modifier = Modifier
                         .size(width = 160.dp, height = 112.dp)
-                        .let { if (section.available) it.focusRequester(filmsTileFocus) else it },
+                        .let { if (section.destination == HomeDestination.Films) it.focusRequester(filmsTileFocus) else it },
                 )
             }
         }

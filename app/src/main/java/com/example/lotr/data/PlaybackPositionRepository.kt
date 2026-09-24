@@ -14,8 +14,8 @@ data class WatchProgress(val positionMs: Long, val durationMs: Long) {
 }
 
 /**
- * Watch history, keyed by [com.example.lotr.data.model.Watchable.id]: resume position and
- * duration per title, plus which title was watched last (for the Home banner).
+ * Watch history, keyed by [com.example.lotr.data.model.Watchable.id] (or another stable id, for
+ * extras): resume position and duration per title, plus which title was watched last (for the Home banner).
  */
 class PlaybackPositionRepository(private val context: Context) {
 
@@ -27,11 +27,15 @@ class PlaybackPositionRepository(private val context: Context) {
 
     val lastWatchedId: Flow<String?> = context.appDataStore.data.map { it[LAST_WATCHED_KEY] }
 
-    suspend fun saveProgress(id: String, positionMs: Long, durationMs: Long) {
+    /**
+     * [markLastWatched] is for the films and episodes the Home banner can feature; extras save
+     * their position without taking over the banner.
+     */
+    suspend fun saveProgress(id: String, positionMs: Long, durationMs: Long, markLastWatched: Boolean = true) {
         context.appDataStore.edit { prefs ->
             prefs[positionKey(id)] = positionMs
             if (durationMs > 0) prefs[durationKey(id)] = durationMs
-            prefs[LAST_WATCHED_KEY] = id
+            if (markLastWatched) prefs[LAST_WATCHED_KEY] = id
         }
     }
 
