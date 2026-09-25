@@ -59,6 +59,22 @@ class MapTileRepository(private val context: Context) {
         context.assets.open("$dir/preview.webp").use(BitmapFactory::decodeStream)
     }
 
+    /** The 3D world's terrain, small (assets/world/preview.jpg), for cards. */
+    suspend fun worldPreview(): Bitmap? = cached("world/preview") {
+        context.assets.open("world/preview.jpg").use(BitmapFactory::decodeStream)
+    }
+
+    /** Where the Atlas places are on the 3D world's terrain, as fractions (assets/world/places.json). */
+    suspend fun worldPlaces(): Map<String, Pair<Float, Float>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val places = JSONObject(context.assets.open("world/places.json").bufferedReader().use { it.readText() }).getJSONObject("places")
+            places.keys().asSequence().associateWith { id ->
+                val uv = places.getJSONArray(id)
+                uv.getDouble(0).toFloat() to uv.getDouble(1).toFloat()
+            }
+        }.getOrDefault(emptyMap())
+    }
+
     /**
      * A photo from the drive as a one-tile pyramid, decoded no bigger than [maxSide] - plenty to
      * zoom into on a TV without holding a 40-megapixel scan in memory.

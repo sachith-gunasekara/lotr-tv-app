@@ -74,6 +74,11 @@ private sealed interface VaultItem {
         override val key get() = "journey_${journey.id}"
     }
 
+    /** Middle-earth in 3D: the open world, or one journey walked through it. */
+    data class World(val journey: Journey?) : VaultItem {
+        override val key get() = "world_${journey?.id ?: "open"}"
+    }
+
     data class Picture(val file: File, val index: Int) : VaultItem {
         override val key get() = "art_${file.path}"
     }
@@ -92,6 +97,7 @@ fun VaultScreen(
     tiles: MapTileRepository,
     onOpenMap: (AtlasMap) -> Unit,
     onFollowJourney: (Journey) -> Unit,
+    onOpenWorld: (Journey?) -> Unit,
     onOpenPicture: (List<File>, Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -112,6 +118,11 @@ fun VaultScreen(
     val rows = remember(artwork) {
         listOfNotNull(
             VaultRow("Maps", "Explore them up close - OK zooms in, Back zooms out", Atlas.maps.map(VaultItem::Map)),
+            VaultRow(
+                "Middle-earth in 3D",
+                "Fly over the real lie of the land - or walk a journey with the travellers",
+                listOf(VaultItem.World(null)) + Atlas.journeys.map { VaultItem.World(it) },
+            ),
             VaultRow("Journeys", "Follow the roads they took, stop by stop", Atlas.journeys.map(VaultItem::Road)),
             artwork.takeIf { it.isNotEmpty() }?.let { files ->
                 VaultRow("Artwork", "From the Art folder on the USB drive", files.mapIndexed { i, f -> VaultItem.Picture(f, i) })
@@ -163,6 +174,7 @@ fun VaultScreen(
                                         when (item) {
                                             is VaultItem.Map -> onOpenMap(item.map)
                                             is VaultItem.Road -> onFollowJourney(item.journey)
+                                            is VaultItem.World -> onOpenWorld(item.journey)
                                             is VaultItem.Picture -> onOpenPicture(artwork, item.index)
                                         }
                                     },
@@ -174,6 +186,8 @@ fun VaultScreen(
                                     VaultPlaceholder()
                                     if (item is VaultItem.Road) {
                                         JourneyArt(item.journey, tiles)
+                                    } else if (item is VaultItem.World) {
+                                        WorldArt(item.journey, tiles)
                                     } else {
                                         rememberArt(item, tiles, forBackdrop = false)?.let {
                                             Image(it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
@@ -193,6 +207,7 @@ private val VaultItem.title: String
     get() = when (this) {
         is VaultItem.Map -> map.title
         is VaultItem.Road -> journey.title
+        is VaultItem.World -> journey?.let { "${it.title} in 3D" } ?: "Roam Middle-earth"
         is VaultItem.Picture -> readableName(file.nameWithoutExtension)
     }
 
@@ -200,6 +215,7 @@ private val VaultItem.overline: String?
     get() = when (this) {
         is VaultItem.Map -> if (map.places.isNotEmpty()) "${map.places.size} places" else null
         is VaultItem.Road -> "${journey.stops.size} stops"
+        is VaultItem.World -> null
         is VaultItem.Picture -> null
     }
 
@@ -210,6 +226,7 @@ private fun rememberArt(item: VaultItem, tiles: MapTileRepository, forBackdrop: 
         value = when (item) {
             is VaultItem.Map -> tiles.preview(item.map.assetDir)
             is VaultItem.Road -> tiles.preview(Atlas.middleEarth.assetDir)
+            is VaultItem.World -> tiles.worldPreview()
             is VaultItem.Picture -> tiles.picture(item.file, maxSide = if (forBackdrop) 1920 else 480).tile(0, 0, 0)
         }?.asImageBitmap()
     }
@@ -243,6 +260,33 @@ private fun JourneyArt(journey: Journey, tiles: MapTileRepository) {
     }
 }
 
+/** The 3D world's terrain, framed around a journey (or the whole land), its road drawn on. */
+@Composable
+private fun WorldArt(journey: Journey?, tiles: MapTileRepository) {
+    val terrain by produceState<ImageBitmap?>(null) { value = tiles.worldPreview()?.asImageBitmap() }
+    val positions by produceState(emptyMap<String, Pair<Float, Float>>()) { value = tiles.worldPlaces() }
+    Canvas(Modifier.fillMaxSize()) {
+        val image = terrain ?: return@Canvas
+        val stops = journey?.stops?.mapNotNull { positions[it.placeId] }.orEmpty()
+        val (scale, origin) = if (stops.size > 1) {
+            val minX = stops.minOf { it.first } * image.width
+            val maxX = stops.maxOf { it.first } * image.width
+            val minY = stops.minOf { it.second } * image.height
+            val maxY = stops.maxOf { it.second } * image.height
+            val margin = 0.06f * image.width
+            val s = min(size.width / (maxX - minX + 2 * margin), size.height / (maxY - minY + 2 * margin))
+                .coerceAtLeast(max(size.width / image.width, size.height / image.height))
+            s to Offset(size.width / 2 - (minX + maxX) / 2 * s, size.height / 2 - (minY + maxY) / 2 * s)
+        } else {
+            val s = max(size.width / image.width, size.height / image.height)
+            s to Offset((size.width - image.width * s) / 2, (size.height - image.height * s) / 2)
+        }
+        drawImage(image, dstOffset = IntOffset(origin.x.toInt(), origin.y.toInt()), dstSize = IntSize((image.width * scale).toInt(), (image.height * scale).toInt()))
+        val points = stops.map { Offset(origin.x + it.first * image.width * scale, origin.y + it.second * image.height * scale) }
+        drawJourney(points, travelled = points.lastIndex.toFloat(), color = LotrGold, width = 2.5f * density)
+    }
+}
+
 /** Under the art while it loads: the Vault tile's moss. */
 @Composable
 private fun VaultPlaceholder() {
@@ -269,6 +313,18 @@ private fun VaultDetails(item: VaultItem, modifier: Modifier = Modifier) {
                 meta = "${item.journey.stops.size} stops, from $first to $last",
                 body = item.journey.summary,
                 hint = "OK to follow the road",
+                modifier = modifier,
+            )
+        }
+        is VaultItem.World -> {
+            val j = item.journey
+            DetailsPanel(
+                overline = "The Vault  ·  Middle-earth in 3D",
+                title = j?.let { "${it.title} in 3D" } ?: "Roam Middle-earth",
+                meta = WORLD_CREDIT,
+                body = j?.let { "${it.summary} Walk it with ${it.travellers}, over the hills and rivers they crossed." }
+                    ?: "The land from the Blue Mountains to Mordor, raised in 3D from an elevation model - mountains, rivers, roads and forests, with the great places standing on it.",
+                hint = if (j != null) "OK to set out" else "OK to fly in",
                 modifier = modifier,
             )
         }

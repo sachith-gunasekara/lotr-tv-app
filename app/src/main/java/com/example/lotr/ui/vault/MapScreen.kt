@@ -220,7 +220,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawReticle(at: Off
 }
 
 @Composable
-private fun MapHeader(title: String, credit: String, hint: String, modifier: Modifier = Modifier) {
+internal fun MapHeader(title: String, credit: String, hint: String, modifier: Modifier = Modifier) {
     Row(
         modifier
             .fillMaxWidth()
@@ -236,7 +236,7 @@ private fun MapHeader(title: String, credit: String, hint: String, modifier: Mod
 }
 
 @Composable
-private fun MapFooter(journey: Journey?, stop: Int, place: MapPlace?, modifier: Modifier = Modifier) {
+internal fun MapFooter(journey: Journey?, stop: Int, place: MapPlace?, modifier: Modifier = Modifier) {
     Box(
         modifier
             .fillMaxWidth()

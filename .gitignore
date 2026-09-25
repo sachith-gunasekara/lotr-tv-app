@@ -19,3 +19,6 @@ local.properties
 keystore.properties
 *.jks
 *.keystore
+
+# 3D world toolchain
+node_modules/
