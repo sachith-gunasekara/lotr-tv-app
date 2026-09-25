@@ -55,6 +55,10 @@ cover art are read from the files). Its *Themes of the Score* shelf explains How
 leitmotifs and plays the tracks on the drive where each is heard, or, without them, the official
 recording online.
 
+**Appendices** videos are listed in one file, `app/src/main/assets/appendices/catalog.json`
+(categories → collections → videos). Edit it to add or remove videos, then run
+`python3 tools/appendices/verify_catalog.py` to check they're all still embeddable.
+
 **Appendices** also streams the extended editions' behind-the-scenes documentaries from YouTube,
 so the TV needs to be online for those.
 

@@ -11,6 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
+import com.example.lotr.data.AppendicesRepository
 import com.example.lotr.data.Atlas
 import com.example.lotr.data.FilmLibrary
 import com.example.lotr.data.MapTileRepository
@@ -71,6 +72,7 @@ class MainActivity : ComponentActivity() {
     private val thumbnails by lazy { ThumbnailRepository(applicationContext) }
     private val mapTiles by lazy { MapTileRepository(applicationContext) }
     private val music by lazy { MusicRepository(applicationContext) }
+    private val appendices by lazy { AppendicesRepository(applicationContext) }
 
     override fun onResume() {
         super.onResume()
@@ -124,6 +126,7 @@ class MainActivity : ComponentActivity() {
                         )
                         Screen.Appendices -> AppendicesScreen(
                             filmLibrary = filmLibrary,
+                            appendices = appendices,
                             playbackPositionRepository = playbackPositionRepository,
                             thumbnails = thumbnails,
                             onPlayVideo = { push(Screen.YouTube(it)) },
