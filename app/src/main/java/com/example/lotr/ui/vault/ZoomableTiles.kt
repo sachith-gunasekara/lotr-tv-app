@@ -104,8 +104,12 @@ class MapCamera(centerX: Float = 0.5f, centerY: Float = 0.5f, zoom: Float = 1f) 
     internal data class Geometry(val imageWidth: Float, val imageHeight: Float, val viewWidth: Float, val viewHeight: Float) {
         val fitScale = min(viewWidth / imageWidth, viewHeight / imageHeight)
 
-        /** Up to 1.5 screen pixels per picture pixel: close enough to read the smallest label. */
-        val maxZoom = max(1f, 1.5f / fitScale)
+        /**
+         * Up to one screen pixel per picture pixel, and no further: the maps are rendered big enough
+         * (Middle-earth is 12288 px wide) that the smallest label is readable before that, and going
+         * past it would only stretch pixels and blur.
+         */
+        val maxZoom = max(1f, 1f / fitScale)
     }
 }
 
