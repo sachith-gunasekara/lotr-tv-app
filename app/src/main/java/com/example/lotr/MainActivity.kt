@@ -156,12 +156,13 @@ class MainActivity : ComponentActivity() {
                         )
                         is Screen.Map -> {
                             val map = Atlas.map(current.mapId)
+                            val journey = current.journeyId?.let(Atlas::journey)
                             MapScreen(
-                                title = map.title,
-                                credit = map.credit,
+                                title = journey?.title ?: map.title,
+                                credit = if (journey != null) "Journey on the 2D map  ·  ${map.credit}" else map.credit,
                                 source = remember(map.id) { mapTiles.assetMap(map.assetDir) },
                                 places = map.places,
-                                journey = current.journeyId?.let(Atlas::journey),
+                                journey = journey,
                             )
                         }
                         is Screen.World -> WorldScreen(journey = current.journeyId?.let(Atlas::journey))

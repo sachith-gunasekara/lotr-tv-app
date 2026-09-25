@@ -1,6 +1,7 @@
 // Low-poly travellers, built from primitives so no model files (or licences) are needed.
 // Each figure's userData.walk(dt) swings its legs and arms; walk(0) lets them come to rest.
 import * as THREE from 'three';
+import { modelFor } from './models.js';
 
 // A little self-light, so the figures stay readable on their shaded side.
 const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, flatShading: true, emissive: color, emissiveIntensity: 0.22, ...extra });
@@ -149,10 +150,15 @@ export function makePony(color = 0x6a4a30, size = 0.8) {
   return g;
 }
 
+/** A horse: the bundled model if there is one ([black] for the Nazgûl), else a built one. */
+export function makeHorse(color = 0x7a5a3a, black = false) {
+  return modelFor(black ? 'black_horse' : 'horse') || makePony(color, 1.2);
+}
+
 /** A horse with a rider of Rohan: green cloak, helm and spear. */
 export function makeRider(color = 0x7a5a3a) {
   const g = new THREE.Group();
-  const horse = makePony(color, 1.2);
+  const horse = makeHorse(color);
   g.add(horse);
   const rider = makeFigure({ cloak: 0x2f4a2a, body: 0x6a6a60, height: 0.9, hair: 0x9a9a90 });
   rider.position.set(0, 0.62, 0);

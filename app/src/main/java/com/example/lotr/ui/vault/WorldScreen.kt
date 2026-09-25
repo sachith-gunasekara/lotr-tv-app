@@ -2,9 +2,12 @@ package com.example.lotr.ui.vault
 
 import android.annotation.SuppressLint
 import android.view.ViewGroup
+import android.util.Log
+import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
@@ -90,6 +93,17 @@ fun WorldScreen(journey: Journey?, modifier: Modifier = Modifier) {
                 },
                 "Android",
             )
+            // The scene's console (and any script error) goes to logcat, tagged World.
+            webChromeClient = object : WebChromeClient() {
+                override fun onConsoleMessage(message: ConsoleMessage): Boolean {
+                    Log.println(
+                        if (message.messageLevel() == ConsoleMessage.MessageLevel.ERROR) Log.ERROR else Log.DEBUG,
+                        "World",
+                        "${message.message()} (${message.sourceId().substringAfterLast('/')}:${message.lineNumber()})",
+                    )
+                    return true
+                }
+            }
             webViewClient = object : WebViewClient() {
                 override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                     assets.shouldInterceptRequest(request.url)
@@ -139,7 +153,7 @@ fun WorldScreen(journey: Journey?, modifier: Modifier = Modifier) {
 
         MapHeader(
             title = journey?.title ?: "Middle-earth in 3D",
-            credit = if (journey != null) "In 3D  ·  $WORLD_CREDIT" else WORLD_CREDIT,
+            credit = if (journey != null) "Journey in 3D  ·  $WORLD_CREDIT" else WORLD_CREDIT,
             hint = if (journey != null) {
                 "◀ ▶ walk to the previous / next stop  ·  ▲ ▼ closer / further  ·  OK overview  ·  « » turn"
             } else {

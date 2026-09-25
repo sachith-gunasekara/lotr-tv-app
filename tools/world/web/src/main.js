@@ -3,6 +3,9 @@
 // the app forwards as World.key(...); state goes back through window.Android.onState(json).
 import * as THREE from 'three';
 import { makeFigure, makePony, makeCart, makeRider } from './figures.js';
+import { makeCharacter } from './characters.js';
+import { SCENES, COMPANIES } from './scenes.js';
+import { loadModels, updateModels, modelFor } from './models.js';
 import { buildLandmark } from './landmarks.js';
 
 const HEIGHT_KM = 22;       // DEM 255 -> 22 km: several times real, so mountains read as mountains
@@ -11,6 +14,18 @@ const bridge = window.Android || { onState() {}, onReady() {} };
 
 const World = {};
 window.World = World;
+// Surface script errors on the page itself (and to the app's log), so a broken scene is visible.
+window.addEventListener('error', (e) => {
+  const el = document.getElementById('loading');
+  if (el) el.textContent = 'Error: ' + e.message;
+  window.__lastError = e.message + ' @' + e.lineno + ':' + e.colno;
+  if (!window.Android) document.title = 'Error: ' + window.__lastError;
+  console.error(e.message, e.filename, e.lineno);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  const el = document.getElementById('loading');
+  if (el) el.textContent = 'Error: ' + (e.reason?.stack || e.reason);
+});
 
 let renderer, scene, camera, clock;
 let terrainW, terrainH, heights, hmW, hmH;
@@ -22,7 +37,8 @@ const animated = [];        // things with update(dt, t)
 const rig = { x: 0, z: 0, dist: 140, yaw: 0, pitch: 0.95 };
 const goal = { ...rig };
 
-let journey = null;         // { stops: [...], curve, travellers, t, toT, stop }
+let journey = null;
+let sceneLook = null;       // world point the camera frames while a scene plays         // { stops: [...], curve, travellers, t, toT, stop }
 let picked = null;
 
 // --- Terrain -------------------------------------------------------------------------------
@@ -68,7 +84,7 @@ function toWorld(u, v) {
 }
 
 function buildTerrain(texture) {
-  const segX = 511, segY = Math.round(511 * terrainH / terrainW);
+  const segX = 383, segY = Math.round(383 * terrainH / terrainW);
   const geo = new THREE.PlaneGeometry(terrainW, terrainH, segX, segY);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
@@ -129,21 +145,41 @@ const v3 = new THREE.Vector3();
 function updateLabels() {
   const w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight;
   let best = null, bestD = Infinity;
+  const visible = [];
   for (const p of labels) {
     v3.set(p.x, p.y + p.top, p.z).project(camera);
     const onScreen = v3.z < 1 && Math.abs(v3.x) < 1.1 && Math.abs(v3.y) < 1.1;
     const dist = camera.position.distanceTo(new THREE.Vector3(p.x, p.y, p.z));
-    const shown = onScreen && dist < rig.dist * 4.5 + 60;
-    p.el.style.display = shown ? 'block' : 'none';
-    if (!shown) continue;
-    const sx = (v3.x * 0.5 + 0.5) * w, sy = (-v3.y * 0.5 + 0.5) * h;
-    p.el.style.transform = `translate(-50%, -100%) translate(${sx}px, ${sy}px)`;
-    p.el.style.opacity = String(Math.max(0.25, Math.min(1, 1.6 - dist / (rig.dist * 3.2 + 40))));
-    const fromCentre = Math.hypot(sx - w / 2, sy - h / 2);
-    if (fromCentre < bestD) { bestD = fromCentre; best = p; }
+    if (!onScreen || dist > rig.dist * 4.5 + 60) {
+      p.el.style.display = 'none';
+      continue;
+    }
+    p.sx = (v3.x * 0.5 + 0.5) * w;
+    p.sy = (-v3.y * 0.5 + 0.5) * h;
+    p.dist = dist;
+    p.fromCentre = Math.hypot(p.sx - w / 2, p.sy - h / 2);
+    if (p.fromCentre < bestD) { bestD = p.fromCentre; best = p; }
+    visible.push(p);
   }
   const pick = !journey && best && bestD < Math.min(w, h) * 0.12 ? best : null;
-  for (const p of labels) p.el.classList.toggle('picked', p === pick || (journey && journey.stopIds[journey.stop] === p.id));
+  const current = journey ? journey.stopIds[journey.stop] : null;
+  // Place labels most important first (the picked place, the journey's stop, then nearest the
+  // middle); any label that would overlap one already placed is left out, so they never pile up.
+  visible.sort((a, b) => ((b === pick || b.id === current) - (a === pick || a.id === current)) || a.fromCentre - b.fromCentre);
+  const placed = [];
+  for (const p of visible) {
+    // While a stop's scene plays, the story card already names it.
+    if (journey?.scene && p.id === current) { p.el.style.display = 'none'; continue; }
+    const bw = p.name.length * 9 + 12, bh = 24;
+    const r = { l: p.sx - bw / 2, r: p.sx + bw / 2, t: p.sy - bh, b: p.sy };
+    const clash = placed.some((q) => r.l < q.r && r.r > q.l && r.t < q.b && r.b > q.t);
+    p.el.style.display = clash ? 'none' : 'block';
+    if (clash) continue;
+    placed.push(r);
+    p.el.style.transform = `translate(-50%, -100%) translate(${p.sx}px, ${p.sy}px)`;
+    p.el.style.opacity = String(Math.max(0.25, Math.min(1, 1.6 - p.dist / (rig.dist * 3.2 + 40))));
+    p.el.classList.toggle('picked', p === pick || p.id === current);
+  }
   if (!journey && pick?.id !== picked) {
     picked = pick?.id || null;
     report();
@@ -152,28 +188,7 @@ function updateLabels() {
 
 // --- Journeys --------------------------------------------------------------------------
 
-const TRAVELLERS = {
-  ring_bearer: [
-    { name: 'Frodo', cloak: 0x3b4a2c, body: 0x6b4a2a, height: 0.62 },
-    { name: 'Sam', cloak: 0x5a4b36, body: 0x7a6040, height: 0.64, pack: true },
-  ],
-  three_hunters: [
-    { name: 'Aragorn', cloak: 0x2e3a2a, body: 0x3a2c22, height: 1.0, sword: true },
-    { name: 'Legolas', cloak: 0x4f5e3a, body: 0x8a8a60, hair: 0xe8d9a0, height: 0.98, bow: true },
-    { name: 'Gimli', cloak: 0x6a3320, body: 0x5a3b28, hair: 0x8a3a1a, height: 0.7, beard: true, stout: true, axe: true },
-  ],
-  merry_and_pippin: [
-    { name: 'Merry', cloak: 0x42552f, body: 0x6f5a30, height: 0.62 },
-    { name: 'Pippin', cloak: 0x4a4f3a, body: 0x7a3a28, height: 0.6 },
-  ],
-  there_and_back_again: [
-    { name: 'Gandalf', cloak: 0x8b8b88, body: 0x6f6f6c, height: 1.08, hat: true, staff: true, beard: true, hair: 0xd8d8d0 },
-    { name: 'Bilbo', cloak: 0x3c5a2c, body: 0x9a2a1e, height: 0.6 },
-    { name: 'Thorin', cloak: 0x2a3550, body: 0x3a3a48, height: 0.72, beard: true, stout: true, hair: 0x2a2020 },
-    { name: 'Balin', cloak: 0x7a2a22, body: 0x5a3020, height: 0.7, beard: true, stout: true, hair: 0xe0e0d8 },
-    { name: 'Bombur', cloak: 0x5a6a2a, body: 0x6a4a20, height: 0.7, beard: true, stout: true, hair: 0xc06a2a },
-  ],
-};
+const TRAVELLER_SCALE = 3.2;   // figure units -> km, so a company is visible from afar
 
 function startJourney(spec) {
   const pts = spec.stops.map((id) => {
@@ -197,23 +212,28 @@ function startJourney(spec) {
   // Where each stop falls along the curve (Catmull-Rom passes through its points at i/(n-1)).
   const stopT = spec.stops.map((_, i) => i / (spec.stops.length - 1));
   const group = new THREE.Group();
-  const company = TRAVELLERS[spec.id] || TRAVELLERS.ring_bearer;
-  // Walking two abreast, the rest following on behind.
-  const members = company.map((m, i) => {
-    const f = makeFigure(m);
-    f.position.set((i % 2 === 0 ? -0.3 : 0.3), 0, -Math.floor(i / 2) * 0.7);
-    group.add(f);
-    return f;
-  });
-  if (spec.id === 'there_and_back_again') {
-    const pony = makePony(0x6a4a30);
-    pony.position.set(1.4, 0, -1.6);
-    group.add(pony);
-    members.push(pony);
-  }
-  group.scale.setScalar(3.2);
+  group.scale.setScalar(TRAVELLER_SCALE);
   scene.add(group);
-  journey = { spec, stopIds: spec.stops, road, curve, stopT, doneGeo, group, members, t: 0, toT: 0, stop: 0, walking: false, samples };
+
+  // Everyone who walks this journey at some point; shown only on their part of the road.
+  const legs = COMPANIES[spec.id] || [];
+  const members = {};
+  for (const [id] of legs) {
+    if (members[id]) continue;
+    const c = makeCharacter(id);
+    c.rotation.order = 'YXZ';
+    c.visible = false;
+    group.add(c);
+    members[id] = c;
+  }
+  if (spec.id === 'there_and_back_again') {
+    const pony = modelFor('pony') || makePony(0x6a4a30);
+    pony.visible = false;
+    group.add(pony);
+    members.pony = pony;
+    legs.push(['pony', 0, 2]);
+  }
+  journey = { spec, stopIds: spec.stops, road, curve, stopT, doneGeo, group, members, legs, t: 0, toT: 0, stop: 0, walking: false, samples, scene: null };
   placeTravellers(0, 0);
   setDone(0);
 }
@@ -223,19 +243,148 @@ function setDone(t) {
   journey.doneGeo.setDrawRange(0, Math.floor(t * journey.samples) * 6 * 6);
 }
 
+/** Who's walking at this point of the road: stops are 0..n-1 along it. */
+function presentAt(stopF) {
+  const ids = [];
+  for (const [id, from, to] of journey.legs) {
+    if (stopF >= from - 0.05 && stopF <= to + 0.05 && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
+
 function placeTravellers(t, dt) {
   const p = journey.curve.getPoint(Math.min(1, Math.max(0, t)));
   const ahead = journey.curve.getPoint(Math.min(1, t + 0.002));
   const y = Math.max(heightAt(p.x, p.z), SEA_Y);
   journey.group.position.set(p.x, y, p.z);
   const heading = Math.atan2(ahead.x - p.x, ahead.z - p.z);
-  if (Number.isFinite(heading) && (ahead.x !== p.x || ahead.z !== p.z)) journey.group.rotation.y = heading;
-  for (const m of journey.members) m.userData.walk(journey.walking ? dt : 0);
+  if (!journey.scene && Number.isFinite(heading) && (ahead.x !== p.x || ahead.z !== p.z)) journey.group.rotation.y = heading;
+
+  // The company, two abreast (bigger folk take more room), in story order.
+  const here = presentAt(t * (journey.stopIds.length - 1));
+  let row = 0, col = 0;
+  for (const [id, m] of Object.entries(journey.members)) {
+    const present = here.includes(id);
+    if (m.userData.held) continue;
+    m.visible = present;
+    if (!present) continue;
+    const big = id === 'treebeard' || id === 'pony';
+    const tx = big ? 1.1 : (col === 0 ? -0.32 : 0.32);
+    const tz = -row * 0.75 - (big ? 0.6 : 0);
+    const k = Math.min(1, dt * 4);
+    m.position.x += (tx - m.position.x) * (m.userData.placed ? k : 1);
+    m.position.z += (tz - m.position.z) * (m.userData.placed ? k : 1);
+    m.userData.placed = true;
+    m.rotation.y = 0;
+    if (!big) {
+      col = 1 - col;
+      if (col === 0) row++;
+    }
+    m.userData.walk(journey.walking ? dt : 0);
+  }
   return heading;
+}
+
+/** Stands everything in the travellers' group on the ground (unless flagged as flying). */
+const tmp = new THREE.Vector3();
+function groundGroup() {
+  const g = journey.group;
+  g.updateMatrixWorld(true);
+  for (const c of g.children) {
+    if (c.userData.ground === false) continue;
+    tmp.set(c.position.x, 0, c.position.z);
+    g.localToWorld(tmp);
+    const h = Math.max(heightAt(tmp.x, tmp.z), SEA_Y);
+    c.position.y = (h - g.position.y) / TRAVELLER_SCALE + (c.userData.lift || 0);
+  }
+}
+
+// --- Scenes at the stops ----------------------------------------------------------------------
+
+function startScene(index) {
+  const def = SCENES[journey.spec.id]?.[index];
+  if (!def) return;
+  const g = journey.group;
+  // Stage the scene facing away from the camera: the company in front, what they meet beyond.
+  g.rotation.y = Math.atan2(g.position.x - camera.position.x, g.position.z - camera.position.z);
+  const added = [], held = [], updates = [];
+  const ctx = {
+    add(obj) {
+      if (obj.userData.ground === undefined) obj.userData.ground = true;
+      g.add(obj);
+      added.push(obj);
+      if (obj.userData.update) updates.push(obj);
+      return obj;
+    },
+    cast(id) {
+      const m = journey.members[id];
+      if (m && m.visible) {
+        m.userData.held = true;
+        held.push({ m, opacity: [] });
+        m.traverse((o) => { if (o.material) held[held.length - 1].opacity.push([o.material, o.material.opacity, o.material.transparent]); });
+        return m;
+      }
+      const c = makeCharacter(id);
+      c.rotation.order = 'YXZ';
+      return ctx.add(c);
+    },
+    at(placeId) {
+      const p = places[placeId];
+      g.updateMatrixWorld(true);
+      return g.worldToLocal(new THREE.Vector3(p.x, Math.max(heightAt(p.x, p.z), SEA_Y), p.z));
+    },
+    stage(r) {
+      g.updateMatrixWorld(true);
+      let top = -Infinity;
+      for (let a = 0; a < 12; a++) {
+        for (const rr of [0, r * 0.5, r]) {
+          tmp.set(Math.sin(a) * rr, 0, Math.cos(a) * rr + r * 0.3);
+          g.localToWorld(tmp);
+          top = Math.max(top, heightAt(tmp.x, tmp.z), SEA_Y);
+        }
+      }
+      return (top - g.position.y) / TRAVELLER_SCALE;
+    },
+    /** Where the camera looks during the scene (local space). */
+    focus(x, y, z) { focus.set(x, y, z); },
+  };
+  const focus = new THREE.Vector3(0, ctx.stage(2) + 0.5, 1.2);
+  const update = def.run(ctx);
+  journey.scene = { def, update, added, held, updates, t: 0, focus };
+  goal.dist = def.dist || 30;
+}
+
+function stopScene() {
+  const s = journey.scene;
+  if (!s) return;
+  for (const o of s.added) {
+    journey.group.remove(o);
+    o.traverse((c) => { c.geometry?.dispose?.(); });
+  }
+  for (const { m, opacity } of s.held) {
+    m.userData.held = false;
+    m.userData.lift = 0;
+    m.rotation.set(0, 0, 0);
+    m.scale.setScalar(1);
+    m.visible = true;
+    for (const [mat, o, tr] of opacity) { mat.opacity = o; mat.transparent = tr; }
+  }
+  journey.scene = null;
+  goal.dist = Math.min(goal.dist, 30);
+}
+
+function updateScene(dt) {
+  const s = journey.scene;
+  if (!s) return;
+  if (!s.frozen) s.t += dt;
+  const t = s.t % s.def.period;
+  s.update(t, dt);
+  for (const o of s.updates) o.userData.update(dt, s.t);
 }
 
 function goToStop(i) {
   if (!journey) return;
+  stopScene();
   journey.stop = Math.max(0, Math.min(journey.stopIds.length - 1, i));
   journey.toT = journey.stopT[journey.stop];
   journey.walking = true;
@@ -287,8 +436,23 @@ function report() {
 
 // --- Loop --------------------------------------------------------------------------------
 
+let frames = 0, fpsSince = 0;
 function frame() {
-  const dt = Math.min(0.05, clock.getDelta());
+  // Up to 0.2 s per step, so a slow device still walks at the right pace (just less smoothly).
+  const dt = Math.min(0.2, clock.getDelta());
+  frames++;
+  if (clock.elapsedTime - fpsSince > 4) {
+    const fps = frames / (clock.elapsedTime - fpsSince);
+    // Too slow for this device: render fewer pixels (down to a quarter), the UI stays sharp.
+    const ratio = renderer.getPixelRatio();
+    if (fps < 24 && ratio > 0.5) {
+      renderer.setPixelRatio(Math.max(0.5, ratio * 0.75));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+    console.log(`fps ${fps.toFixed(1)} at pixel ratio ${renderer.getPixelRatio().toFixed(2)}, ${renderer.info.render.calls} draw calls, ${renderer.info.render.triangles} triangles`);
+    frames = 0;
+    fpsSince = clock.elapsedTime;
+  }
   const t = clock.elapsedTime;
 
   if (journey) {
@@ -300,14 +464,22 @@ function frame() {
       if ((dir > 0 && journey.t >= journey.toT) || (dir < 0 && journey.t <= journey.toT) || dir === 0) {
         journey.t = journey.toT;
         journey.walking = false;
+        startScene(journey.stop);
         report();
       }
     }
     const heading = placeTravellers(journey.t, dt);
+    updateScene(dt);
+    groundGroup();
+    if (journey.scene) {
+      journey.group.updateMatrixWorld(true);
+      const f = journey.group.localToWorld(journey.scene.focus.clone());
+      sceneLook = f;
+    } else sceneLook = null;
     setDone(Math.max(journey.t, journey.done || 0));
     journey.done = Math.max(journey.t, journey.done || 0);
-    goal.x = journey.group.position.x;
-    goal.z = journey.group.position.z;
+    goal.x = sceneLook ? sceneLook.x : journey.group.position.x;
+    goal.z = sceneLook ? sceneLook.z : journey.group.position.z;
     // Follow from behind while walking; the viewer can still swing round with ⏪ ⏩.
     if (journey.walking && Number.isFinite(heading) && !journey.userYaw) goal.yaw += angleDiff(goal.yaw, heading + Math.PI) * Math.min(1, dt * 1.2);
   }
@@ -320,7 +492,7 @@ function frame() {
   // Look down from high up; lean towards the horizon when close, so mountains stand up.
   rig.pitch = 0.42 + 0.62 * Math.min(1, Math.max(0, Math.log(rig.dist / 12) / Math.log(60)));
 
-  const groundY = Math.max(heightAt(rig.x, rig.z), SEA_Y);
+  const groundY = sceneLook ? rig.lookY = lerpTo(rig.lookY ?? sceneLook.y, sceneLook.y, k) : (rig.lookY = Math.max(heightAt(rig.x, rig.z), SEA_Y));
   const horiz = Math.cos(rig.pitch) * rig.dist;
   camera.position.set(
     rig.x - Math.sin(rig.yaw) * horiz,
@@ -330,15 +502,20 @@ function frame() {
   // Never dip under a hillside.
   const under = heightAt(camera.position.x, camera.position.z) + 1.5;
   if (camera.position.y < under) camera.position.y = under;
-  camera.lookAt(rig.x, groundY, rig.z);
+  // In journeys the story card covers the bottom of the screen, so aim a little below the
+  // travellers: that lifts them into the open upper part of the picture.
+  camera.lookAt(rig.x, groundY - (journey ? rig.dist * 0.22 : 0), rig.z);
   scene.fog.near = rig.dist * 2.2;
   scene.fog.far = rig.dist * 10 + 700;
 
   for (const a of animated) a.update(dt, t);
+  updateModels(dt);
   renderer.render(scene, camera);
   updateLabels();
   requestAnimationFrame(frame);
 }
+
+function lerpTo(a, b, k) { return a + (b - a) * k; }
 
 function angleDiff(from, to) {
   let d = (to - from) % (Math.PI * 2);
@@ -383,6 +560,7 @@ function addLife() {
 
 World.start = async (config) => {
   World.data = await (await fetch('places.json')).json();
+  await loadModels();
   terrainW = World.data.widthKm;
   terrainH = World.data.heightKm;
   await loadHeights();
@@ -420,6 +598,12 @@ World.start = async (config) => {
       goal.x = rig.x = journey.group.position.x;
       goal.z = rig.z = journey.group.position.z;
     }
+    startScene(journey.stop);
+    // For testing: start the scene part-way through (?t=seconds), and freeze it there (?freeze).
+    if (journey.scene && config.sceneTime) journey.scene.t = config.sceneTime;
+    if (journey.scene && config.freeze) journey.scene.frozen = true;
+    if (config.go !== undefined) setTimeout(() => goToStop(config.go), 800);
+    if (config.go !== undefined) setInterval(() => { document.title = JSON.stringify({ t: journey.t, toT: journey.toT, walking: journey.walking, stop: journey.stop, scene: !!journey.scene, err: window.__lastError }); }, 1000);
   } else {
     addLife();
     const start = places[config.startAt || 'hobbiton'];
@@ -450,9 +634,17 @@ if (!window.Android && /[?&]demo/.test(location.search)) {
   const which = new URLSearchParams(location.search).get('demo');
   const demo = {
     ring_bearer: ['hobbiton', 'bree', 'weathertop', 'rivendell', 'moria', 'lorien', 'amon_hen', 'dead_marshes', 'black_gate', 'osgiliath', 'minas_morgul', 'mount_doom'],
+    three_hunters: ['amon_hen', 'fangorn', 'edoras', 'helms_deep', 'isengard', 'erech', 'pelargir', 'minas_tirith', 'black_gate'],
+    merry_and_pippin: ['amon_hen', 'fangorn', 'isengard', 'edoras', 'minas_tirith'],
     there_and_back_again: ['hobbiton', 'trollshaws', 'rivendell', 'high_pass', 'carrock', 'elvenking', 'esgaroth', 'erebor'],
   };
   window.addEventListener('load', () => World.start(which && demo[which]
-    ? { journey: { id: which, stops: demo[which] }, startStop: Number(new URLSearchParams(location.search).get('stop') || 0) }
+    ? {
+      journey: { id: which, stops: demo[which] },
+      startStop: Number(new URLSearchParams(location.search).get('stop') || 0),
+      sceneTime: Number(new URLSearchParams(location.search).get('t') || 0),
+      freeze: new URLSearchParams(location.search).has('freeze'),
+      go: new URLSearchParams(location.search).has('go') ? Number(new URLSearchParams(location.search).get('go')) : undefined,
+    }
     : { startAt: new URLSearchParams(location.search).get('at') || 'hobbiton' }));
 }
