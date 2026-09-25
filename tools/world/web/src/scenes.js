@@ -335,7 +335,7 @@ const theBlackGate = {
     const march = [...Array(10)].map(() => ctx.add(makeOrc()));
     ['frodo', 'sam', 'gollum'].forEach((id, i) => {
       const c = ctx.cast(id);
-      put(c, -2.4 + i * 0.4, -1.4, 1, 2);
+      put(c, -1.0 + i * 0.35, -0.9, 0, 0.5);
       c.scale.y = 0.75; // crouching, hidden
     });
     return (t, dt) => {
@@ -379,11 +379,12 @@ const morgulBeam = {
     beam.userData.ground = false;
     const host = [0, 1, 2, 3, 4].map(() => ctx.add(blackRider()));
     const base = ctx.stage(1);
-    ['frodo', 'sam', 'gollum'].forEach((id, i) => put(ctx.cast(id), -1.6 + i * 0.4, -0.8, 0, 2));
+    ['frodo', 'sam', 'gollum'].forEach((id, i) => put(ctx.cast(id), -0.7 + i * 0.35, -0.9, 0, 0));
+    ctx.focus(0, base + 1, 0);
     return (t, dt) => {
-      beam.position.set(0, base + 20, 2);
+      beam.position.set(0, base + 20, 0);
       beam.material.opacity = 0.25 + seg(t, 1, 1.5) * (1 - seg(t, 3, 5)) * 0.6;
-      host.forEach((r, i) => travel(r, [0, 2], [3 + i * 0.4, -4 - i * 0.8], seg(t, 3 + i * 0.4, 9), dt));
+      host.forEach((r, i) => travel(r, [0, 0.4], [3 + i * 0.4, -4 - i * 0.8], seg(t, 3 + i * 0.4, 9), dt));
     };
   },
 };
@@ -394,21 +395,21 @@ const crackOfDoom = {
     const base = ctx.stage(2);
     // Orodruin: a dark cone of ash with fire in its throat; the hobbits on the rim.
     const top = base + 2;
-    ctx.focus(0, top + 0.4, 1.4);
+    ctx.focus(0, top + 0.4, 0);
     const cone = ctx.add(new THREE.Mesh(new THREE.CylinderGeometry(1.6, 3.6, 2.2, 24, 1, true), mat(0x2a1e18, { side: THREE.DoubleSide, emissive: 0x3a1004, emissiveIntensity: 0.4 })));
     cone.userData.ground = false;
-    cone.position.set(0, base + 0.9, 1.8);
+    cone.position.set(0, base + 0.9, 0);
     const rim = ctx.add(new THREE.Mesh(new THREE.RingGeometry(0.85, 1.6, 24), mat(0x2a1e18, { side: THREE.DoubleSide })));
     rim.userData.ground = false;
     rim.rotation.x = -Math.PI / 2;
-    rim.position.set(0, top - 0.1, 1.8);
+    rim.position.set(0, top - 0.1, 0);
     const lava = ctx.add(new THREE.Mesh(new THREE.CircleGeometry(0.85, 24), new THREE.MeshBasicMaterial({ color: 0xff5a10 })));
     lava.userData.ground = false;
     lava.rotation.x = -Math.PI / 2;
-    lava.position.set(0, top - 0.2, 1.8);
+    lava.position.set(0, top - 0.2, 0);
     const heat = ctx.add(makeFire(1.1));
     heat.userData.ground = false;
-    heat.position.set(0, top - 0.25, 1.8);
+    heat.position.set(0, top - 0.25, 0);
     const onRim = (o) => { o.userData.ground = false; o.position.y = top - 0.1; return o; };
     const frodo = onRim(ctx.cast('frodo'));
     const sam = onRim(ctx.cast('sam'));
@@ -417,30 +418,30 @@ const crackOfDoom = {
     theRing.userData.ground = false;
     const eruption = ctx.add(makeEmitter({ count: 220, color: 0xff7a20, endColor: 0x301008, size: 1.1, life: 2.4, spread: 0.6, velocity: [0, 6, 0], jitter: 3, gravity: 2.5, rate: 1 }));
     eruption.userData.ground = false;
-    eruption.position.set(0, top, 1.8);
+    eruption.position.set(0, top, 0);
     const eagles = [0, 1, 2].map(() => {
       const e = ctx.add(makeEagle(0.5));
       e.userData.ground = false;
       return e;
     });
     return (t, dt) => {
-      put(frodo, 0, 0.72, 0, 1.8);
-      put(sam, -0.75, 0.62, 0, 1.8);
+      put(frodo, 0, -1.08, 0, 0);
+      put(sam, -0.75, -1.18, 0, 0);
       // Gollum leaps, bites the Ring away...
-      travel(gollum, [1.05, 0.9], [0.15, 0.85], seg(t, 2, 3), dt);
-      if (t < 2) put(gollum, 1.05, 0.9, 0, 1);
+      travel(gollum, [1.05, -0.9], [0.15, -0.95], seg(t, 2, 3), dt);
+      if (t < 2) put(gollum, 1.05, -0.9, 0, 0);
       // ...and topples into the fire with it.
       const drop = ease(seg(t, 4.5, 6));
-      if (t > 4.5) put(gollum, 0.15, lerp(0.85, 1.8, drop));
+      if (t > 4.5) put(gollum, 0.15, lerp(-0.95, 0, drop));
       gollum.position.y = top - 0.1 - drop * 1.2;
       theRing.visible = t > 2.5 && t < 6.2;
-      theRing.position.set(0.15, top + 0.35 - drop * 1.3, lerp(0.85, 1.8, drop));
+      theRing.position.set(0.15, top + 0.35 - drop * 1.3, lerp(-0.95, 0, drop));
       // The mountain erupts.
       eruption.userData.on = t > 6.3 && t < 9;
       // The Eagles are coming, and bear Frodo and Sam away.
       eagles.forEach((e, i) => {
         const k = ease(seg(t, 8.5 + i * 0.4, 12));
-        e.position.set(lerp(-4 + i * 3, -0.8 + i * 0.8, k), top + lerp(7, 1.9, k), lerp(12, 2.4, k));
+        e.position.set(lerp(-4 + i * 3, -0.8 + i * 0.8, k), top + lerp(7, 1.9, k), lerp(10, 0.6, k));
         e.rotation.y = Math.PI;
       });
       [frodo, sam].forEach((h) => { h.position.y = top - 0.1 + ease(seg(t, 12, 13.5)) * 3; });
