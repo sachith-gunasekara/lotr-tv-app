@@ -1,0 +1,140 @@
+[
+ {
+  "file": "frodo.glb",
+  "ids": [
+   "frodo"
+  ],
+  "height": 0.6,
+  "walkClip": "CharacterArmature|Walk",
+  "idleClip": "CharacterArmature|Idle"
+ },
+ {
+  "file": "sam.glb",
+  "ids": [
+   "sam"
+  ],
+  "height": 0.62,
+  "walkClip": "CharacterArmature|Walk",
+  "idleClip": "CharacterArmature|Idle"
+ },
+ {
+  "file": "merry.glb",
+  "ids": [
+   "merry"
+  ],
+  "height": 0.61,
+  "walkClip": "CharacterArmature|Walk",
+  "idleClip": "CharacterArmature|Idle"
+ },
+ {
+  "file": "pippin.glb",
+  "ids": [
+   "pippin"
+  ],
+  "height": 0.6,
+  "walkClip": "Walk",
+  "idleClip": "Idle"
+ },
+ {
+  "file": "aragorn.glb",
+  "ids": [
+   "aragorn"
+  ],
+  "height": 1.0,
+  "walkClip": "CharacterArmature|Walk",
+  "idleClip": "CharacterArmature|Idle"
+ },
+ {
+  "file": "wizard.glb",
+  "ids": [
+   "gandalf"
+  ],
+  "height": 1.08,
+  "walkClip": "CharacterArmature|Walk",
+  "idleClip": "CharacterArmature|Idle",
+  "grey": 11053216
+ },
+ {
+  "file": "wizard.glb",
+  "ids": [
+   "gandalf_white"
+  ],
+  "height": 1.08,
+  "walkClip": "CharacterArmature|Walk",
+  "idleClip": "CharacterArmature|Idle",
+  "grey": 16777215,
+  "glow": 0.35
+ },
+ {
+  "file": "nazgul.glb",
+  "ids": [
+   "nazgul",
+   "witch_king"
+  ],
+  "height": 1.3,
+  "recolor": {
+   "mat17": 723465,
+   "mat21": 1973790,
+   "mat25": 10135728,
+   "mat23": 0,
+   "mat8": 2097152
+  },
+  "noLift": true
+ },
+ {
+  "file": "eagle.glb",
+  "ids": [
+   "eagle"
+  ],
+  "length": 5,
+  "loopClip": "metarig|Fly"
+ },
+ {
+  "file": "orc.glb",
+  "ids": [
+   "goblin"
+  ],
+  "height": 0.75,
+  "walkClip": "CharacterArmature|Walk",
+  "idleClip": "CharacterArmature|Idle"
+ },
+ {
+  "file": "horse.glb",
+  "ids": [
+   "horse"
+  ],
+  "height": 1.4,
+  "walkClip": "Gallop",
+  "idleClip": "Idle"
+ },
+ {
+  "file": "horse.glb",
+  "ids": [
+   "black_horse"
+  ],
+  "height": 1.5,
+  "walkClip": "Gallop",
+  "idleClip": "Idle",
+  "recolor": {
+   "Main": 789258,
+   "Main_Dark": 526086,
+   "Main_Light": 1446930,
+   "Muzzle": 657672
+  },
+  "noLift": true
+ },
+ {
+  "file": "pony.glb",
+  "ids": [
+   "pony"
+  ],
+  "height": 0.9,
+  "walkClip": "Walk",
+  "idleClip": "Idle",
+  "recolor": {
+   "Main": 5913124,
+   "Main_Light": 9071178,
+   "Main_Dark": 3810324
+  }
+ }
+]

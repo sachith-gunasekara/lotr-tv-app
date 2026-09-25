@@ -120,10 +120,14 @@ fun VaultScreen(
             VaultRow("Maps", "Explore them up close - OK zooms in, Back zooms out", Atlas.maps.map(VaultItem::Map)),
             VaultRow(
                 "Middle-earth in 3D",
-                "Fly over the real lie of the land - or walk a journey with the travellers",
+                "Fly over the land, or walk a journey with the travellers and see what happened at each stop",
                 listOf(VaultItem.World(null)) + Atlas.journeys.map { VaultItem.World(it) },
             ),
-            VaultRow("Journeys", "Follow the roads they took, stop by stop", Atlas.journeys.map(VaultItem::Road)),
+            VaultRow(
+                "Journeys on the Map",
+                "The same journeys in 2D - the road traced stop by stop on the painted map",
+                Atlas.journeys.map(VaultItem::Road),
+            ),
             artwork.takeIf { it.isNotEmpty() }?.let { files ->
                 VaultRow("Artwork", "From the Art folder on the USB drive", files.mapIndexed { i, f -> VaultItem.Picture(f, i) })
             },
@@ -207,15 +211,15 @@ private val VaultItem.title: String
     get() = when (this) {
         is VaultItem.Map -> map.title
         is VaultItem.Road -> journey.title
-        is VaultItem.World -> journey?.let { "${it.title} in 3D" } ?: "Roam Middle-earth"
+        is VaultItem.World -> journey?.title ?: "Roam Middle-earth"
         is VaultItem.Picture -> readableName(file.nameWithoutExtension)
     }
 
 private val VaultItem.overline: String?
     get() = when (this) {
         is VaultItem.Map -> if (map.places.isNotEmpty()) "${map.places.size} places" else null
-        is VaultItem.Road -> "${journey.stops.size} stops"
-        is VaultItem.World -> null
+        is VaultItem.Road -> "2D map  ·  ${journey.stops.size} stops"
+        is VaultItem.World -> if (journey != null) "3D journey  ·  ${journey.stops.size} stops" else "3D  ·  open world"
         is VaultItem.Picture -> null
     }
 
@@ -308,23 +312,23 @@ private fun VaultDetails(item: VaultItem, modifier: Modifier = Modifier) {
             val first = Atlas.place(item.journey.stops.first().placeId).name
             val last = Atlas.place(item.journey.stops.last().placeId).name
             DetailsPanel(
-                overline = "The Vault  ·  Journeys  ·  ${item.journey.travellers}",
+                overline = "Journeys on the Map (2D)  ·  ${item.journey.travellers}",
                 title = item.journey.title,
                 meta = "${item.journey.stops.size} stops, from $first to $last",
                 body = item.journey.summary,
-                hint = "OK to follow the road",
+                hint = "OK to trace the road on the map  ·  the same journey is walkable in 3D above",
                 modifier = modifier,
             )
         }
         is VaultItem.World -> {
             val j = item.journey
             DetailsPanel(
-                overline = "The Vault  ·  Middle-earth in 3D",
-                title = j?.let { "${it.title} in 3D" } ?: "Roam Middle-earth",
+                overline = if (j != null) "Journey in 3D  ·  ${j.travellers}" else "Middle-earth in 3D  ·  open world",
+                title = j?.title ?: "Roam Middle-earth",
                 meta = WORLD_CREDIT,
-                body = j?.let { "${it.summary} Walk it with ${it.travellers}, over the hills and rivers they crossed." }
+                body = j?.let { "${it.summary} The company joins and parts as it did in the story, and what happened plays out at each stop." }
                     ?: "The land from the Blue Mountains to Mordor, raised in 3D from an elevation model - mountains, rivers, roads and forests, with the great places standing on it.",
-                hint = if (j != null) "OK to set out" else "OK to fly in",
+                hint = if (j != null) "OK to set out  ·  ◀ ▶ walk from stop to stop" else "OK to fly in",
                 modifier = modifier,
             )
         }
