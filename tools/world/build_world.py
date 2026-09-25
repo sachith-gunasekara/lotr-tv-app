@@ -28,7 +28,9 @@ CROP = (1300, 3300, 7000, 8000)
 TEX_W = 4096
 HEIGHT_W = 1024
 
-# Atlas place id -> Arda feature position in metres (from Cities, Towns, Citadels, placenames).
+# Atlas place id -> Arda feature position in metres: from Cities, Towns and Citadels, else the
+# feature itself - Mount Doom is the crater polygon in the Vulcanism layer, Amon Hen the hill on
+# Nen Hithoel's west shore (place-name labels sit beside their features, not on them).
 PLACES = {
     "grey_havens": (367917, 1042100), "hobbiton": (518241, 1045233), "bree": (598318, 1045197),
     "weathertop": (673193, 1049127), "trollshaws": (805000, 1068000), "rivendell": (881105, 1054420),
@@ -36,9 +38,9 @@ PLACES = {
     "esgaroth": (1272744, 1129148), "erebor": (1259345, 1184848), "moria": (847291, 920986),
     "lorien": (969296, 921786), "dol_guldur": (1071014, 929617), "fangorn": (889434, 832120),
     "isengard": (805979, 812497), "helms_deep": (805415, 748074), "edoras": (863747, 723402),
-    "erech": (876213, 681290), "amon_hen": (1079000, 748000), "dead_marshes": (1138789, 759159),
+    "erech": (876213, 681290), "amon_hen": (1070500, 748500), "dead_marshes": (1138789, 759159),
     "black_gate": (1181537, 723163), "minas_tirith": (1120738, 618877), "osgiliath": (1138600, 629458),
-    "minas_morgul": (1169735, 637427), "mount_doom": (1230413, 667554), "barad_dur": (1253267, 671171),
+    "minas_morgul": (1169735, 637427), "mount_doom": (1235057, 662888), "barad_dur": (1253267, 671171),
     "pelargir": (1076325, 529883),
 }
 
