@@ -32,6 +32,7 @@ import com.example.lotr.ui.reading.ReaderScreen
 import com.example.lotr.ui.reading.ReadingScreen
 import com.example.lotr.ui.vault.MapScreen
 import com.example.lotr.ui.vault.VaultScreen
+import com.example.lotr.ui.vault.WorldScreen
 import java.io.File
 import com.example.lotr.ui.theme.LotrTheme
 
@@ -49,6 +50,9 @@ private sealed interface Screen {
 
     /** A text from the Reading room: [index] on shelf [shelf]. */
     data class Reader(val shelf: Int, val index: Int) : Screen
+
+    /** Middle-earth in 3D, roamed freely or along [journeyId]. */
+    data class World(val journeyId: String? = null) : Screen
 
     /** Pictures from the drive, opened at [index]; [folder] says where they came from. */
     data class Pictures(val files: List<File>, val index: Int, val folder: String) : Screen
@@ -131,6 +135,7 @@ class MainActivity : ComponentActivity() {
                             tiles = mapTiles,
                             onOpenMap = { push(Screen.Map(it.id)) },
                             onFollowJourney = { push(Screen.Map(Atlas.middleEarth.id, it.id)) },
+                            onOpenWorld = { push(Screen.World(it?.id)) },
                             onOpenPicture = { files, index -> push(Screen.Pictures(files, index, folder = "Art")) },
                         )
                         Screen.Reading -> ReadingScreen(
@@ -156,6 +161,7 @@ class MainActivity : ComponentActivity() {
                                 journey = current.journeyId?.let(Atlas::journey),
                             )
                         }
+                        is Screen.World -> WorldScreen(journey = current.journeyId?.let(Atlas::journey))
                         is Screen.Pictures -> {
                             val file = current.files[current.index]
                             MapScreen(

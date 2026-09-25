@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  @font-face { font-family: 'Aniron'; src: url('/res/font/aniron.ttf'); }
+  @font-face { font-family: 'Cormorant'; src: url('/res/font/cormorant_garamond.ttf'); font-weight: 600; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0e0b08; }
+  #stage, #labels { position: fixed; inset: 0; }
+  #labels { pointer-events: none; }
+  .label {
+    position: absolute; left: 0; top: 0; white-space: nowrap;
+    font-family: 'Aniron', serif; font-size: 15px; color: #f0d97d;
+    text-shadow: 0 1px 3px #000, 0 0 8px rgba(0,0,0,0.8);
+    padding-bottom: 6px;
+  }
+  .label::after {
+    content: ''; position: absolute; left: 50%; bottom: 0; width: 7px; height: 7px; margin-left: -3.5px;
+    border-radius: 50%; background: #d4af37; box-shadow: 0 0 6px #000;
+  }
+  .label.picked { color: #fff6d8; font-size: 19px; text-shadow: 0 0 10px rgba(232,169,74,0.9), 0 1px 3px #000; }
+  #loading {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 50% 30%, #2a2014, #0e0b08 70%);
+    font-family: 'Aniron', serif; color: #d4af37; font-size: 26px; letter-spacing: 1px;
+    transition: opacity 1.2s ease;
+  }
+  #loading.gone { opacity: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="labels"></div>
+<div id="loading">Unrolling the map of Middle-earth…</div>
+<script src="world.js"></script>
+</body>
+</html>

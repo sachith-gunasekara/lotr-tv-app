@@ -1,0 +1,12 @@
+{
+  "name": "lotr-world",
+  "private": true,
+  "description": "The 3D Middle-earth (three.js), bundled into app/src/main/assets/world/world.js",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --minify --format=iife --target=chrome80 --outfile=../../../app/src/main/assets/world/world.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "three": "^0.180.0"
+  }
+}

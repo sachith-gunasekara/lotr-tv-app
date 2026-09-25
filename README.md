@@ -42,7 +42,8 @@ LOTR/
 ```
 
 **The Vault** has the maps built in (a zoomable Middle-earth with its places and the great
-journeys, plus the Shire, the Pelennor, Beleriand and Númenor); pictures in an `Art` folder are
+journeys, plus the Shire, the Pelennor, Beleriand and Númenor), and **Middle-earth in 3D**: the
+land raised from an elevation model to fly over, and the journeys walked by the travellers; pictures in an `Art` folder are
 added as Artwork (the app asks for access to pictures the first time).
 
 **Reading** has a timeline of the War of the Ring, a who's who, the languages of Middle-earth and
@@ -80,4 +81,6 @@ positions).
 
 See `CLAUDE.md` for architecture and conventions, and `third_party/` for font, icon and map
 licenses (note: the Aniron font is personal-use only). The map assets are rebuilt from their
-sources with `python3 tools/maps/build_maps.py` (needs Pillow and Google Chrome).
+sources with `python3 tools/maps/build_maps.py` (needs Pillow and Google Chrome); the 3D world's
+data with `python3 tools/world/build_world.py` (Pillow, numpy) and its scene with
+`npm install && npm run build` in `tools/world/web`.
