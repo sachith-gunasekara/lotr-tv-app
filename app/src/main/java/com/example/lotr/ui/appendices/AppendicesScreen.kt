@@ -19,6 +19,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -34,15 +35,21 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Tab
+import androidx.tv.material3.TabDefaults
+import androidx.tv.material3.TabRow
+import androidx.tv.material3.TabRowDefaults
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
 import coil3.compose.rememberAsyncImagePainter
 import com.example.lotr.R
-import com.example.lotr.data.Appendices
+import com.example.lotr.data.AppendicesRepository
+import com.example.lotr.data.AppendixCategory
 import com.example.lotr.data.FilmLibrary
 import com.example.lotr.data.PlaybackPositionRepository
 import com.example.lotr.data.ThumbnailRepository
@@ -68,7 +75,7 @@ private sealed interface Appendix {
     val watchId: String
     val title: String
 
-    data class Online(val video: YouTubeVideo, val shelfTitle: String, val about: String) : Appendix {
+    data class Online(val video: YouTubeVideo, val where: String, val about: String) : Appendix {
         override val key get() = video.watchId
         override val watchId get() = video.watchId
         override val title get() = video.title
@@ -83,13 +90,19 @@ private sealed interface Appendix {
 
 private data class AppendixRow(val title: String, val about: String, val items: List<Appendix>)
 
+/** A tab of shelves: one catalog category, or the extras found on the drive. */
+private data class AppendixTab(val id: String, val title: String, val rows: List<AppendixRow>)
+
 /**
- * Behind the scenes: the extended editions' appendices and more from YouTube, plus any extras on
- * the drive. Laid out like The Films - the focused card drives the backdrop and details panel.
+ * Behind the scenes: the catalog's categories as tabs across the top (the extended editions'
+ * appendices, the making of, the music, the cast, Tolkien, ...), each a stack of shelves, plus the
+ * extras found on the drive. Otherwise laid out like The Films - the focused card drives the
+ * backdrop and details panel.
  */
 @Composable
 fun AppendicesScreen(
     filmLibrary: FilmLibrary,
+    appendices: AppendicesRepository,
     playbackPositionRepository: PlaybackPositionRepository,
     thumbnails: ThumbnailRepository,
     onPlayVideo: (YouTubeVideo) -> Unit,
@@ -98,21 +111,38 @@ fun AppendicesScreen(
 ) {
     val scan by filmLibrary.scan.collectAsState()
     val extras = scan?.extras.orEmpty()
-    val rows = remember(extras) {
+    val categories by produceState<List<AppendixCategory>?>(null) { value = appendices.categories() }
+    val tabs = remember(extras, categories) {
         listOfNotNull(
             extras.takeIf { it.isNotEmpty() }?.let { found ->
-                AppendixRow("On the drive", "From the Appendices folder on the USB drive", found.map(Appendix::OnDrive))
+                AppendixTab("drive", "On the drive", listOf(AppendixRow("On the drive", "From the Appendices folder on the USB drive", found.map(Appendix::OnDrive))))
             },
-        ) + Appendices.shelves.map { shelf ->
-            AppendixRow(shelf.title, shelf.about, shelf.videos.map { Appendix.Online(it, shelf.title, shelf.about) })
+        ) + categories.orEmpty().map { category ->
+            AppendixTab(
+                id = category.id,
+                title = category.title,
+                rows = category.shelves.map { shelf ->
+                    AppendixRow(shelf.title, shelf.about, shelf.videos.map { Appendix.Online(it, "${category.title}  ·  ${shelf.title}", shelf.about) })
+                },
+            )
         }
     }
-    val all = rows.flatMap { it.items }
+    if (tabs.isEmpty()) {
+        Box(modifier.fillMaxSize().lotrBackground())
+        return
+    }
+    val all = tabs.flatMap { tab -> tab.rows.flatMap { it.items } }
 
-    // Saveable, so coming back from a video lands on the card that was playing.
+    // Saveable, so coming back from a video lands on the card (and tab) that was playing.
     var focusedKey by rememberSaveable { mutableStateOf<String?>(null) }
     val focused = all.firstOrNull { it.key == focusedKey } ?: all.first()
-    val focusedRow = rows.indexOfFirst { row -> row.items.any { it.key == focused.key } }
+    var tabId by rememberSaveable { mutableStateOf<String?>(null) }
+    val tabIndex = tabs.indexOfFirst { it.id == tabId }.takeIf { it >= 0 }
+        ?: tabs.indexOfFirst { tab -> tab.rows.any { row -> row.items.any { it.key == focused.key } } }.coerceAtLeast(0)
+    val tab = tabs[tabIndex]
+    // The card in this tab to land on: the one last focused, if it's here, else the first.
+    val landing = tab.rows.flatMap { it.items }.firstOrNull { it.key == focused.key } ?: tab.rows.first().items.first()
+    val shown = if (focused.key in tab.rows.flatMap { r -> r.items.map { it.key } }) focused else landing
 
     val scope = rememberCoroutineScope()
     val play = { item: Appendix ->
@@ -130,45 +160,78 @@ fun AppendicesScreen(
     }
 
     Box(modifier.fillMaxSize().lotrBackground()) {
-        AppendixBackdrop(focused, thumbnails)
+        AppendixBackdrop(shown, thumbnails)
 
         Column(Modifier.fillMaxSize().padding(top = 28.dp)) {
-            AppendixDetails(focused, playbackPositionRepository, Modifier.padding(horizontal = 48.dp))
-            Spacer(Modifier.height(16.dp))
+            AppendixDetails(shown, playbackPositionRepository, Modifier.padding(horizontal = 48.dp))
+            Spacer(Modifier.height(12.dp))
+
+            // Moving along the tabs switches the shelves below; ▼ goes down into them.
+            TabRow(
+                selectedTabIndex = tabIndex,
+                modifier = Modifier.padding(horizontal = 48.dp),
+                indicator = { positions, doesTabRowHaveFocus ->
+                    TabRowDefaults.PillIndicator(
+                        currentTabPosition = positions[tabIndex],
+                        doesTabRowHaveFocus = doesTabRowHaveFocus,
+                        activeColor = MaterialTheme.colorScheme.primary,
+                        inactiveColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+                    )
+                },
+            ) {
+                tabs.forEachIndexed { i, t ->
+                    Tab(
+                        selected = i == tabIndex,
+                        onFocus = { tabId = t.id },
+                        colors = TabDefaults.pillIndicatorTabColors(
+                            contentColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+                            selectedContentColor = MaterialTheme.colorScheme.secondary,
+                            focusedContentColor = MaterialTheme.colorScheme.onPrimary,
+                        ),
+                    ) {
+                        Text(t.title, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
 
             val initialFocus = remember { FocusRequester() }
             LaunchedEffect(Unit) {
                 withFrameNanos { }
                 initialFocus.requestFocus()
             }
-            val columnState = remember { LazyListState(firstVisibleItemIndex = focusedRow.coerceAtLeast(0)) }
-            ShelfColumn(state = columnState, modifier = Modifier.weight(1f)) {
-                items(rows, key = { it.title }) { row ->
-                    Column {
-                        Row(verticalAlignment = Alignment.Bottom) {
-                            ShelfTitle(row.title)
-                            Text(
-                                text = row.about,
-                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1,
-                                modifier = Modifier.padding(start = 16.dp, end = 48.dp),
-                            )
-                        }
-                        val initialIndex = row.items.indexOfFirst { it.key == focused.key }.coerceAtLeast(0)
-                        val rowState = remember { LazyListState(firstVisibleItemIndex = initialIndex) }
-                        ShelfRow(state = rowState) {
-                            itemsIndexed(row.items, key = { _, item -> item.key }) { _, item ->
-                                AppendixCard(
-                                    item = item,
-                                    thumbnails = thumbnails,
-                                    playbackPositionRepository = playbackPositionRepository,
-                                    onClick = { play(item) },
-                                    onLongClick = { startOver(item) },
-                                    modifier = Modifier
-                                        .onFocusChanged { if (it.isFocused) focusedKey = item.key }
-                                        .let { if (item.key == focused.key) it.focusRequester(initialFocus) else it },
+            key(tab.id) {
+                val focusedRow = tab.rows.indexOfFirst { row -> row.items.any { it.key == shown.key } }.coerceAtLeast(0)
+                val columnState = remember { LazyListState(firstVisibleItemIndex = focusedRow) }
+                ShelfColumn(state = columnState, modifier = Modifier.weight(1f)) {
+                    items(tab.rows, key = { it.title }) { row ->
+                        Column {
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                ShelfTitle(row.title)
+                                Text(
+                                    text = row.about,
+                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(start = 16.dp, end = 48.dp),
                                 )
+                            }
+                            val initialIndex = row.items.indexOfFirst { it.key == shown.key }.coerceAtLeast(0)
+                            val rowState = remember { LazyListState(firstVisibleItemIndex = initialIndex) }
+                            ShelfRow(state = rowState) {
+                                itemsIndexed(row.items, key = { _, item -> item.key }) { _, item ->
+                                    AppendixCard(
+                                        item = item,
+                                        thumbnails = thumbnails,
+                                        playbackPositionRepository = playbackPositionRepository,
+                                        onClick = { play(item) },
+                                        onLongClick = { startOver(item) },
+                                        modifier = Modifier
+                                            .onFocusChanged { if (it.isFocused) focusedKey = item.key }
+                                            .let { if (item.key == shown.key) it.focusRequester(initialFocus) else it },
+                                    )
+                                }
                             }
                         }
                     }
@@ -262,7 +325,7 @@ private fun AppendixDetails(item: Appendix, playbackPositionRepository: Playback
     }
     when (item) {
         is Appendix.Online -> DetailsPanel(
-            overline = "${item.shelfTitle}  ·  Behind the scenes",
+            overline = item.where,
             title = item.title,
             meta = "${formatLength(item.video.lengthSeconds.toLong())}  ·  on YouTube, from ${item.video.channel}",
             body = item.about,
