@@ -26,11 +26,11 @@ GOLD = (212, 175, 55)
 
 # id -> (source URL, long side in px, recolour style)
 MAPS = {
-    "middle_earth": ("https://raw.githubusercontent.com/k1tesurfen/mapome/master/preview-mapome.svg", 6144, "mapome"),
-    "the_shire": ("https://upload.wikimedia.org/wikipedia/commons/6/65/Sketch_Map_of_The_Shire.svg", 3072, "sketch"),
-    "pelennor": ("https://upload.wikimedia.org/wikipedia/commons/6/69/Battle_of_the_Pelennor_Fields.svg", 3072, "sketch"),
-    "beleriand": ("https://upload.wikimedia.org/wikipedia/commons/4/46/Sketch_Map_of_Beleriand.svg", 3072, "sketch"),
-    "numenor": ("https://upload.wikimedia.org/wikipedia/commons/a/ae/N%C3%BAmenor_Sketch_Map.svg", 3072, "sketch"),
+    "middle_earth": ("https://raw.githubusercontent.com/k1tesurfen/mapome/master/preview-mapome.svg", 12288, "mapome"),
+    "the_shire": ("https://upload.wikimedia.org/wikipedia/commons/6/65/Sketch_Map_of_The_Shire.svg", 6144, "sketch"),
+    "pelennor": ("https://upload.wikimedia.org/wikipedia/commons/6/69/Battle_of_the_Pelennor_Fields.svg", 6144, "sketch"),
+    "beleriand": ("https://upload.wikimedia.org/wikipedia/commons/4/46/Sketch_Map_of_Beleriand.svg", 6144, "sketch"),
+    "numenor": ("https://upload.wikimedia.org/wikipedia/commons/a/ae/N%C3%BAmenor_Sketch_Map.svg", 6144, "sketch"),
 }
 
 
@@ -99,18 +99,29 @@ def render(svg, longside, png):
 html,body{margin:0;background:%s;}
 text,tspan{font-family:'Cormorant' !important;font-weight:600 !important;}
 </style></head><body>%s</body></html>""" % (FONTS, rgb_css(BG), svg)
-    page = png + ".html"
-    open(page, "w", encoding="utf-8").write(html)
-    subprocess.run([CHROME, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--allow-file-access-from-files",
-                    "--virtual-time-budget=5000", "--screenshot=" + png, "--window-size=%d,%d" % (W, H), "file://" + page],
-                   check=True, stderr=subprocess.DEVNULL)
+    # Chrome truncates very tall screenshots, so render in bands of at most BAND px and stitch.
+    BAND = 3072
+    bands = []
+    for top in range(0, H, BAND):
+        h = min(BAND, H - top)
+        page = f"{png}.{top}.html"
+        open(page, "w", encoding="utf-8").write(html.replace("<body>", f'<body style="margin-top:-{top}px">', 1))
+        band = f"{png}.{top}.png"
+        subprocess.run([CHROME, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--allow-file-access-from-files",
+                        "--virtual-time-budget=8000", "--screenshot=" + band, "--window-size=%d,%d" % (W, h), "file://" + page],
+                       check=True, stderr=subprocess.DEVNULL)
+        bands.append((top, band))
+    out = Image.new("RGB", (W, H))
+    for top, band in bands:
+        out.paste(Image.open(band).convert("RGB"), (0, top))
+    out.save(png)
 
 
 def tile(png, out):
     im = Image.open(png).convert("RGB")
     width, height = im.size
     os.makedirs(out, exist_ok=True)
-    preview_w = 1600 if width > 4000 else 1280
+    preview_w = 1600 if width > 8000 else 1280
     im.resize((preview_w, round(height * preview_w / width)), Image.LANCZOS).save(os.path.join(out, "preview.webp"), "WEBP", quality=80, method=6)
     level = 0
     while True:
@@ -119,7 +130,7 @@ def tile(png, out):
         for ty in range(math.ceil(lh / TILE)):
             for tx in range(math.ceil(lw / TILE)):
                 im.crop((tx * TILE, ty * TILE, min((tx + 1) * TILE, lw), min((ty + 1) * TILE, lh))) \
-                    .save(os.path.join(out, str(level), f"{tx}_{ty}.webp"), "WEBP", quality=82, method=6)
+                    .save(os.path.join(out, str(level), f"{tx}_{ty}.webp"), "WEBP", quality=78, method=6)
         if lw <= 1024 and lh <= 1024:
             break
         im = im.resize((max(1, lw // 2), max(1, lh // 2)), Image.LANCZOS)
