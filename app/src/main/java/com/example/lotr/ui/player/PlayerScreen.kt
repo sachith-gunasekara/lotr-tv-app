@@ -1,6 +1,7 @@
 package com.example.lotr.ui.player
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -40,9 +42,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.compose.PlayerSurface
@@ -54,6 +60,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import java.util.Locale
 
 private const val SEEK_STEP_MS = 10_000L
 private const val OVERLAY_TIMEOUT_MS = 3_000L
@@ -75,7 +82,12 @@ fun PlayerScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
-    val exoPlayer = remember { ExoPlayer.Builder(context).build() }
+    val exoPlayer = remember {
+        ExoPlayer.Builder(context).build().apply {
+            // Multi-language releases (e.g. the series) should start in English, whatever the file's default is.
+            trackSelectionParameters = trackSelectionParameters.buildUpon().setPreferredAudioLanguage("en").build()
+        }
+    }
 
     var isPlaying by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<PlaybackException?>(null) }
@@ -84,6 +96,9 @@ fun PlayerScreen(
     // Bumped on every key press; the overlay shows while paused or briefly after input.
     var interaction by remember { mutableIntStateOf(0) }
     var overlayVisible by remember { mutableStateOf(true) }
+    var audioOptions by remember { mutableStateOf(emptyList<AudioOption>()) }
+    var audioPickerOpen by remember { mutableStateOf(false) }
+    var audioPickerIndex by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(id, uri) {
         val startPositionMs = playbackPositionRepository.positionMs(id).first()
@@ -103,9 +118,9 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(interaction, isPlaying) {
+    LaunchedEffect(interaction, isPlaying, audioPickerOpen) {
         overlayVisible = true
-        if (isPlaying) {
+        if (isPlaying && !audioPickerOpen) {
             delay(OVERLAY_TIMEOUT_MS)
             overlayVisible = false
         }
@@ -123,6 +138,20 @@ fun PlayerScreen(
 
             override fun onPlayerError(e: PlaybackException) {
                 error = e
+            }
+
+            // The language preference only sees language tags; some releases leave tracks untagged
+            // ("und") and only name them, so pick an English-named one by hand - once, so a choice
+            // made in the picker isn't undone.
+            private var checkedEnglish = false
+
+            override fun onTracksChanged(tracks: Tracks) {
+                audioOptions = audioOptions(tracks)
+                if (checkedEnglish || audioOptions.isEmpty()) return
+                checkedEnglish = true
+                if (audioOptions.none { it.selected && it.isEnglish }) {
+                    audioOptions.firstOrNull { it.isEnglish }?.let { exoPlayer.selectAudio(it) }
+                }
             }
         }
         exoPlayer.addListener(playerListener)
@@ -147,6 +176,14 @@ fun PlayerScreen(
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
+    BackHandler(enabled = audioPickerOpen) { audioPickerOpen = false }
+
+    fun openAudioPicker() {
+        if (audioOptions.size < 2) return
+        audioPickerIndex = audioOptions.indexOfFirst { it.selected }.coerceAtLeast(0)
+        audioPickerOpen = true
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -155,6 +192,21 @@ fun PlayerScreen(
             .focusable()
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                if (audioPickerOpen) {
+                    when (event.key) {
+                        Key.DirectionUp -> audioPickerIndex = (audioPickerIndex - 1).coerceAtLeast(0)
+                        Key.DirectionDown -> audioPickerIndex = (audioPickerIndex + 1).coerceAtMost(audioOptions.lastIndex)
+                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
+                            audioOptions.getOrNull(audioPickerIndex)?.let { exoPlayer.selectAudio(it) }
+                            audioPickerOpen = false
+                        }
+                        Key.MediaAudioTrack -> audioPickerOpen = false
+                        Key.DirectionLeft, Key.DirectionRight -> Unit
+                        else -> return@onKeyEvent false
+                    }
+                    interaction++
+                    return@onKeyEvent true
+                }
                 val handled = when (event.key) {
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.MediaPlayPause, Key.Spacebar -> {
                         if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
@@ -170,7 +222,11 @@ fun PlayerScreen(
                         exoPlayer.seekTo((exoPlayer.currentPosition - SEEK_STEP_MS).coerceAtLeast(0))
                         true
                     }
-                    Key.DirectionUp, Key.DirectionDown -> true // just reveal the overlay
+                    Key.DirectionDown, Key.MediaAudioTrack -> {
+                        openAudioPicker()
+                        true
+                    }
+                    Key.DirectionUp -> true // just reveal the overlay
                     else -> false
                 }
                 if (handled) {
@@ -196,7 +252,98 @@ fun PlayerScreen(
                 isPlaying = isPlaying,
                 positionMs = positionMs,
                 durationMs = durationMs,
+                audio = audioOptions.firstOrNull { it.selected }?.label?.takeIf { audioOptions.size > 1 },
                 modifier = Modifier.align(Alignment.BottomCenter),
+            )
+            if (audioPickerOpen) {
+                AudioPicker(
+                    options = audioOptions,
+                    highlighted = audioPickerIndex,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(48.dp),
+                )
+            }
+        }
+    }
+}
+
+/** One playable audio track of the current video. */
+internal data class AudioOption(
+    val group: Tracks.Group,
+    val trackIndex: Int,
+    val label: String,
+    val isEnglish: Boolean,
+    val selected: Boolean,
+)
+
+private fun audioOptions(tracks: Tracks): List<AudioOption> {
+    val options = tracks.groups
+        .filter { it.type == C.TRACK_TYPE_AUDIO }
+        .flatMap { group ->
+            (0 until group.length)
+                .filter { group.isTrackSupported(it) }
+                .map { index ->
+                    val format = group.getTrackFormat(index)
+                    AudioOption(group, index, audioLabel(format), format.isEnglish(), group.isTrackSelected(index))
+                }
+        }
+    // Same-named tracks (two English mixes, say) get numbered so they can be told apart.
+    return options.mapIndexed { i, option ->
+        if (options.count { it.label == option.label } > 1) option.copy(label = "${option.label} (${i + 1})") else option
+    }
+}
+
+private fun Format.isEnglish(): Boolean =
+    language?.lowercase()?.let { it == "en" || it.startsWith("en-") || it == "eng" } == true ||
+        label?.contains("english", ignoreCase = true) == true
+
+private fun audioLabel(format: Format): String {
+    val language = format.language?.takeUnless { it == C.LANGUAGE_UNDETERMINED }
+        ?.let { Locale.forLanguageTag(it).getDisplayLanguage(Locale.ENGLISH).takeIf(String::isNotBlank) ?: it }
+    val name = format.label?.takeIf { it.isNotBlank() } ?: language ?: "Unknown"
+    val channels = when (format.channelCount) {
+        1 -> "Mono"
+        2 -> "Stereo"
+        6 -> "5.1"
+        8 -> "7.1"
+        else -> null
+    }
+    return listOfNotNull(name, channels?.takeUnless { name.contains(it, ignoreCase = true) }).joinToString(" · ")
+}
+
+private fun Player.selectAudio(option: AudioOption) {
+    trackSelectionParameters = trackSelectionParameters.buildUpon()
+        .setOverrideForType(TrackSelectionOverride(option.group.mediaTrackGroup, option.trackIndex))
+        .build()
+}
+
+/** The list of audio tracks, opened with ▼; ▲ ▼ choose, OK picks, Back closes. */
+@Composable
+private fun AudioPicker(options: List<AudioOption>, highlighted: Int, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .width(360.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.Black.copy(alpha = 0.85f))
+            .padding(vertical = 16.dp),
+    ) {
+        Text(
+            text = "Audio",
+            color = MaterialTheme.colorScheme.secondary,
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+        )
+        options.forEachIndexed { index, option ->
+            val isHighlighted = index == highlighted
+            Text(
+                text = "${if (option.selected) "✓" else "   "}  ${option.label}",
+                color = if (isHighlighted) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.8f),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(if (isHighlighted) Color.White.copy(alpha = 0.08f) else Color.Transparent)
+                    .padding(horizontal = 24.dp, vertical = 10.dp),
             )
         }
     }
@@ -210,6 +357,7 @@ internal fun PlayerOverlay(
     positionMs: Long,
     durationMs: Long,
     modifier: Modifier = Modifier,
+    audio: String? = null,
 ) {
     Column(
         modifier = modifier
@@ -237,12 +385,13 @@ internal fun PlayerOverlay(
         }
         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
             Text(
-                text = "${if (isPlaying) "▶" else "❚❚"}  ${formatPlaybackTime(positionMs)} / ${formatPlaybackTime(durationMs)}",
+                text = "${if (isPlaying) "▶" else "❚❚"}  ${formatPlaybackTime(positionMs)} / ${formatPlaybackTime(durationMs)}" +
+                    (audio?.let { "  ·  $it" } ?: ""),
                 color = Color.White,
                 style = MaterialTheme.typography.bodyLarge,
             )
             Text(
-                text = "OK play/pause  ·  ◀ ▶ 10s  ·  Back to exit",
+                text = "OK play/pause  ·  ◀ ▶ 10s  ·  " + (if (audio != null) "▼ audio  ·  " else "") + "Back to exit",
                 color = Color.White.copy(alpha = 0.6f),
                 style = MaterialTheme.typography.bodyMedium,
             )
