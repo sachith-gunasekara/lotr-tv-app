@@ -1,9 +1,8 @@
 // The great creatures of the story, stylised: the Balrog, Smaug, the Eagles, fell beasts, trolls.
-// Each uses a bundled model when there is one (models.js), otherwise a built stand-in.
+// All built from primitives - no model files.
 // userData.update(dt, t) animates wings, flames and breathing.
 import * as THREE from 'three';
 import { makeEmitter, makeFlash } from './effects.js';
-import { modelFor } from './models.js';
 
 const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.75, flatShading: true, emissive: color, emissiveIntensity: 0.15, ...extra });
 
@@ -37,34 +36,11 @@ function glowLight(color) {
   return f;
 }
 
-function withModel(id, build) {
-  const model = modelFor(id);
-  if (!model) return build();
-  model.userData.update = () => {};
-  return model;
-}
+const built = (build) => build();
 
 /** The Balrog of Moria: a huge shadow wreathed in flame, horned and winged, with a fiery whip. */
 export function makeBalrog() {
-  const model = modelFor('balrog');
-  if (model) {
-    const g = new THREE.Group();
-    g.add(model);
-    const flames = makeEmitter({ count: 160, size: 0.9, life: 1.1, spread: 0.9, velocity: [0, 2.2, 0], jitter: 0.9 });
-    flames.position.y = 2.2;
-    const mane = makeEmitter({ count: 70, size: 0.8, life: 0.8, spread: 0.4, velocity: [0, 1.6, -0.3], jitter: 0.5 });
-    mane.position.y = 3.9;
-    const light = glowLight(0xff5a10);
-    light.position.y = 3;
-    g.add(flames, mane, light);
-    g.userData.update = (dt, t) => {
-      flames.userData.update(dt);
-      mane.userData.update(dt);
-      light.intensity = 26 + Math.sin(t * 9) * 6;
-    };
-    return g;
-  }
-  return withModel('none', () => {
+  return built(() => {
     const g = new THREE.Group();
     const ember = mat(0x1a0906, { emissive: 0xff4a10, emissiveIntensity: 0.25 });
     const body = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.8, 2.2, 8), ember);
@@ -121,26 +97,8 @@ export function makeBalrog() {
 }
 
 /** A great dragon - Smaug, red-gold - with flapping wings and fire on demand (userData.breathe). */
-export function makeDragon({ color = 0x8a2a14, belly = 0xc08a3a, scale = 1, model = true } = {}) {
-  const m = model && modelFor('smaug');
-  if (m) {
-    const g = new THREE.Group();
-    g.add(m);
-    const fire = makeEmitter({ count: 180, size: 0.8, life: 0.9, spread: 0.12, velocity: [0, -1.2, 7], jitter: 1.4, rate: 1 });
-    fire.position.set(0, 0.6, 3);
-    fire.userData.on = false;
-    const light = glowLight(0xff6a20);
-    light.position.set(0, -0.5, 4.5);
-    g.add(fire, light);
-    g.scale.setScalar(scale);
-    g.userData.breathe = (on) => { fire.userData.on = on; };
-    g.userData.update = (dt) => {
-      fire.userData.update(dt);
-      light.intensity = fire.userData.on ? 18 : Math.max(0, light.intensity - dt * 40);
-    };
-    return g;
-  }
-  return withModel('none', () => {
+export function makeDragon({ color = 0x8a2a14, belly = 0xc08a3a, scale = 1 } = {}) {
+  return built(() => {
     const g = new THREE.Group();
     const skin = mat(color, { roughness: 0.5, metalness: 0.2 });
     // A spine of tapering segments, head to tail, along +z to -z.
@@ -196,7 +154,7 @@ export function makeDragon({ color = 0x8a2a14, belly = 0xc08a3a, scale = 1, mode
 
 /** One of the Great Eagles: brown, gold-headed, wings beating slowly. */
 export function makeEagle(scale = 1) {
-  return withModel('eagle', () => {
+  return built(() => {
     const g = new THREE.Group();
     const brown = mat(0x5a3a1e);
     const body = new THREE.Mesh(new THREE.SphereGeometry(0.4, 10, 8), brown);
@@ -225,7 +183,7 @@ export function makeEagle(scale = 1) {
 /** A fell beast with a Nazgûl on its back. */
 export function makeFellBeast(rider) {
   const g = new THREE.Group();
-  const d = makeDragon({ color: 0x1c1a18, belly: 0x2a2622, scale: 0.55, model: false });
+  const d = makeDragon({ color: 0x1c1a18, belly: 0x2a2622, scale: 0.55 });
   g.add(d);
   if (rider) {
     rider.position.set(0, 0.25, 0.3);
@@ -238,7 +196,7 @@ export function makeFellBeast(rider) {
 
 /** A hill-troll: huge, grey-green and lumpy. Call turnToStone() at dawn. */
 export function makeTroll() {
-  return withModel('troll', () => {
+  return built(() => {
     const g = new THREE.Group();
     const skin = mat(0x5a6048);
     const parts = [];
@@ -323,5 +281,53 @@ export function makeMumak() {
     phase += dt * 2;
     legs.forEach((l, i) => { l.rotation.x = Math.sin(phase + (i % 3 ? Math.PI : 0)) * 0.25; });
   };
+  return g;
+}
+
+/** Shelob: a vast spider, black and bloated, with eight jointed legs that scuttle. */
+export function makeSpider(scale = 1) {
+  const g = new THREE.Group();
+  const black = mat(0x14110e, { emissiveIntensity: 0.08 });
+  const abdomen = new THREE.Mesh(new THREE.SphereGeometry(0.75, 10, 8), black);
+  abdomen.scale.set(1, 0.8, 1.25);
+  abdomen.position.set(0, 0.95, -0.8);
+  const thorax = new THREE.Mesh(new THREE.SphereGeometry(0.42, 9, 7), black);
+  thorax.position.set(0, 0.8, 0.2);
+  g.add(abdomen, thorax);
+  // A cluster of eyes, glinting.
+  for (let i = 0; i < 6; i++) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 5, 4), new THREE.MeshBasicMaterial({ color: 0xb8e060 }));
+    eye.position.set((i % 3 - 1) * 0.12, 0.9 + Math.floor(i / 3) * 0.1, 0.6);
+    g.add(eye);
+  }
+  const legs = [];
+  for (let i = 0; i < 8; i++) {
+    const side = i < 4 ? -1 : 1;
+    const k = i % 4;
+    const hip = new THREE.Group();
+    hip.position.set(side * 0.3, 0.85, 0.35 - k * 0.2);
+    const spread = 0.75 - k * 0.5;   // front legs reach forward, back legs back
+    hip.rotation.y = side > 0 ? -spread : Math.PI + spread;
+    const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.9, 5), black);
+    upper.rotation.z = Math.PI / 2;
+    upper.position.x = 0.45;
+    const knee = new THREE.Group();
+    knee.position.x = 0.9;
+    const lower = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.04, 1.1, 5), black);
+    lower.position.y = -0.5;
+    knee.add(lower);
+    knee.rotation.z = -0.35;
+    hip.add(upper, knee);
+    hip.rotation.z = 0.5;
+    g.add(hip);
+    legs.push(hip);
+  }
+  g.scale.setScalar(scale);
+  let phase = 0;
+  g.userData.walk = (dt) => {
+    if (dt > 0) phase += dt * 9;
+    legs.forEach((l, i) => { l.rotation.z = 0.5 + (dt > 0 ? Math.sin(phase + i * 1.3) * 0.2 : 0); });
+  };
+  g.userData.update = (dt, t) => { abdomen.position.y = 0.95 + Math.sin(t * 1.5) * 0.03; };
   return g;
 }
