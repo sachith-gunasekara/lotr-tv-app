@@ -20,6 +20,16 @@ data class ScoreTheme(
     }
 }
 
+/** A long stretch of the score to leave playing - a place to sit in rather than a theme to study. */
+data class Ambience(
+    val id: String,
+    val name: String,
+    val glyph: String,
+    val about: String,
+    val listen: YouTubeVideo,
+    val filmId: String,
+)
+
 /** The score's great themes, in the order they're met. Notes written for this app. */
 object ScoreThemes {
     private const val FELLOWSHIP = "fellowship"
@@ -70,5 +80,13 @@ object ScoreThemes {
             "The song over the end of the journey, by Fran Walsh, Howard Shore and Annie Lennox, who sings it. It won the Academy Award for Best Original Song.",
             track("HvF31-2bVNE", "Into the West", 348, artist = "Annie Lennox"),
             listOf("into the west", "grey havens"), RETURN),
+    )
+
+    /** Ambience to leave on: long-form uploads of the score, played online (checked embeddable). */
+    val ambience: List<Ambience> = listOf(
+        Ambience("shire", "The Shire", "Shire",
+            "Two hours of the Shire's music from the soundtrack, to leave playing - a quiet evening in Bag End, far from any adventure.",
+            YouTubeVideo("K69tbUo3vGs", "The Shire - Music from the Soundtrack", 7486, channel = "Visual Escape"),
+            FELLOWSHIP),
     )
 }

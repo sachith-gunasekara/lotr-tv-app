@@ -23,6 +23,7 @@ import com.example.lotr.data.YouTubeVideo
 import com.example.lotr.data.readableName
 import com.example.lotr.data.model.Watchable
 import com.example.lotr.ui.appendices.AppendicesScreen
+import com.example.lotr.ui.components.ShireBackgroundMusic
 import com.example.lotr.ui.home.HomeDestination
 import com.example.lotr.ui.library.LibraryScreen
 import com.example.lotr.ui.music.MusicScreen
@@ -66,6 +67,13 @@ private sealed interface Screen {
     data class YouTube(val video: YouTubeVideo) : Screen
 }
 
+/** The Vault and Reading (and everything opened from them) play quiet Shire music. */
+private val Screen.hasShireMusic: Boolean
+    get() = when (this) {
+        Screen.Vault, is Screen.Map, is Screen.World, is Screen.Pictures, Screen.Reading, is Screen.Reader -> true
+        else -> false
+    }
+
 class MainActivity : ComponentActivity() {
     private val storageRepository by lazy { StorageRepository(applicationContext) }
     private val filmLibrary by lazy { FilmLibrary(storageRepository, lifecycleScope) }
@@ -97,6 +105,8 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val current = backStack.last()
+                // Outside the per-screen state so it plays on, uninterrupted, between those screens.
+                ShireBackgroundMusic(playing = current.hasShireMusic)
                 val push = { screen: Screen -> backStack = backStack + screen }
                 // Keeps each screen's rememberSaveable state (e.g. the selected film) while it's
                 // covered by a screen pushed on top of it.
