@@ -8,6 +8,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -79,7 +81,8 @@ private const val PREVIEW_DELAY_MS = 5_000L
 private const val AMBIENT_LOOP_MS = 45_000L
 private val TextShadow = Shadow(color = Color.Black.copy(alpha = 0.7f), offset = Offset(2f, 3f), blurRadius = 8f)
 
-private const val YOUTUBE_START_TIMEOUT_MS = 12_000L
+// Generous: a cold WebView fetching the IFrame API can take over 10 s.
+private const val YOUTUBE_START_TIMEOUT_MS = 20_000L
 
 /**
  * What the banner plays after resting a few seconds: a trailer from the drive (with sound), else
@@ -401,5 +404,10 @@ private fun YouTubePreview(
         onDispose { playerView.release() }
     }
 
-    AndroidView(factory = { playerView }, modifier = modifier)
+    // YouTube fits the video inside the view with black bars; a 16:9 view covering the card,
+    // clipped by it, crops like the drive previews' ContentScale.Crop.
+    BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
+        val width = maxOf(maxWidth, maxHeight * 16f / 9f)
+        AndroidView(factory = { playerView }, modifier = Modifier.requiredSize(width, width * 9f / 16f))
+    }
 }
