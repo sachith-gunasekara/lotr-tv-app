@@ -2,7 +2,8 @@
 """
 Checks every video in app/src/main/assets/appendices/catalog.json is still on YouTube and
 embeddable (the app plays them in an embedded player), and that its recorded length matches.
-Also checks the map places' score cues in PlaceMusic.kt (reported, never fixed - edit them by hand).
+Also checks the background score cues in PlaceMusic.kt and HomeMusic.kt (reported, never fixed -
+edit them by hand).
 
   python3 tools/appendices/verify_catalog.py          # report
   python3 tools/appendices/verify_catalog.py --fix    # also update lengths that drifted
@@ -13,7 +14,7 @@ import json, os, re, sys, time, urllib.error, urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CATALOG = os.path.join(ROOT, "app/src/main/assets/appendices/catalog.json")
-PLACE_MUSIC = os.path.join(ROOT, "app/src/main/java/com/example/lotr/data/PlaceMusic.kt")
+SCORE_FILES = [os.path.join(ROOT, f"app/src/main/java/com/example/lotr/data/{name}.kt") for name in ("PlaceMusic", "HomeMusic")]
 HEADERS = {"User-Agent": "Mozilla/5.0", "Accept-Language": "en"}
 
 
@@ -50,11 +51,12 @@ def main():
                     if fix:
                         video["seconds"] = seconds
                 time.sleep(0.2)
-    # cue("id", "title", seconds) in PlaceMusic.kt
-    cues = re.findall(r'"(\w+)" to cue\("([\w-]{11})", "([^"]+)", (\d+)\)', open(PLACE_MUSIC, encoding="utf-8").read())
-    for place, video_id, title, recorded in cues:
+    # cue("id", "title", seconds) in the score files
+    cues = [(os.path.basename(path)[:-3], *cue) for path in SCORE_FILES
+            for cue in re.findall(r'cue\("([\w-]{11})", "([^"]+)", (\d+)\)', open(path, encoding="utf-8").read())]
+    for source, video_id, title, recorded in cues:
         error, seconds = check(video_id)
-        where = f'place music/{place}: {video_id} "{title}"'
+        where = f'{source}: {video_id} "{title}"'
         if error:
             problems += 1
             print(f"BROKEN   {where} - {error}")
@@ -65,7 +67,7 @@ def main():
         json.dump(catalog, open(CATALOG, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
         open(CATALOG, "a", encoding="utf-8").write("\n")
     total = sum(len(s["videos"]) for c in catalog["categories"] for s in c["collections"])
-    print(f"{total} videos and {len(cues)} place cues, {problems} broken")
+    print(f"{total} videos and {len(cues)} score cues, {problems} broken")
     sys.exit(1 if problems else 0)
 
 

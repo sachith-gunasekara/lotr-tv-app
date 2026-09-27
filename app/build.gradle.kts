@@ -21,8 +21,8 @@ android {
         applicationId = "com.example.lotr"
         minSdk = 24
         targetSdk = 37
-        versionCode = 8
-        versionName = "1.6.0"
+        versionCode = 9
+        versionName = "1.7.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
