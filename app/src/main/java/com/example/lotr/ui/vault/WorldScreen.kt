@@ -21,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,7 +56,12 @@ const val WORLD_CREDIT = "Terrain: the Arda elevation model (Outerra forums, via
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun WorldScreen(journey: Journey?, modifier: Modifier = Modifier) {
+fun WorldScreen(
+    journey: Journey?,
+    modifier: Modifier = Modifier,
+    /** The place in view (or the journey's stop), when it changes. */
+    onPlace: (String) -> Unit = {},
+) {
     val context = LocalContext.current
     var state by remember { mutableStateOf(WorldState()) }
 
@@ -119,6 +125,11 @@ fun WorldScreen(journey: Journey?, modifier: Modifier = Modifier) {
         onDispose { webView.destroy() }
     }
 
+    val shownPlace = if (journey != null) Atlas.place(journey.stops[state.stop.coerceAtMost(journey.stops.lastIndex)].placeId)
+    else state.placeId?.let { id -> Atlas.places.firstOrNull { it.id == id } }
+    val currentOnPlace by rememberUpdatedState(onPlace)
+    LaunchedEffect(shownPlace) { shownPlace?.let { currentOnPlace(it.id) } }
+
     fun send(key: String) = webView.evaluateJavascript("World.key('$key')", null)
 
     // Back pulls the camera out first; once it's as far out as it goes, Back leaves.
@@ -164,8 +175,7 @@ fun WorldScreen(journey: Journey?, modifier: Modifier = Modifier) {
         MapFooter(
             journey = journey,
             stop = state.stop.coerceAtMost((journey?.stops?.size ?: 1) - 1),
-            place = if (journey != null) Atlas.place(journey.stops[state.stop.coerceAtMost(journey.stops.lastIndex)].placeId)
-            else state.placeId?.let { id -> Atlas.places.firstOrNull { it.id == id } },
+            place = shownPlace,
             modifier = Modifier.align(Alignment.BottomStart),
         )
     }

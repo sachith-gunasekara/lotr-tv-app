@@ -26,6 +26,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -84,6 +85,8 @@ fun MapScreen(
     modifier: Modifier = Modifier,
     /** For pictures from the drive: ◀ ▶ at the whole-picture view go to the previous / next one. */
     onStep: ((Int) -> Unit)? = null,
+    /** The marked place now in view (the journey's stop, or the one under the reticle), when it changes. */
+    onPlace: (String) -> Unit = {},
 ) {
     val pyramid by produceState<TilePyramid?>(null, source) { value = source.pyramid() }
     val camera = remember(source) { MapCamera() }
@@ -119,6 +122,10 @@ fun MapScreen(
                 .minByOrNull { it.second }?.first
         }
     }
+
+    val shownPlace = if (journey != null) stopPlaces.getOrNull(stop) else picked
+    val currentOnPlace by rememberUpdatedState(onPlace)
+    LaunchedEffect(shownPlace) { shownPlace?.let { currentOnPlace(it.id) } }
 
     // Back zooms out first; at the whole map it falls through and leaves the screen.
     BackHandler(enabled = journey == null && camera.target.third > 1.01f) {
@@ -195,7 +202,7 @@ fun MapScreen(
         MapFooter(
             journey = journey,
             stop = stop,
-            place = if (journey != null) stopPlaces.getOrNull(stop) else picked,
+            place = shownPlace,
             modifier = Modifier.align(Alignment.BottomStart),
         )
     }
