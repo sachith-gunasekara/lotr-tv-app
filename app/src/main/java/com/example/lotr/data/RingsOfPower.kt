@@ -17,6 +17,9 @@ data class EpisodeInfo(val title: String?, val teaser: String?, val arrives: Str
 object RingsOfPower {
     const val SERIES_ID = "rings_of_power"
     const val TITLE = "The Rings of Power"
+
+    /** The latest season's official trailer on YouTube (also in the Appendices catalog). */
+    const val TRAILER_YOUTUBE_ID = "c9fsBy45YTQ"
     const val SYNOPSIS = "Thousands of years before the Fellowship, the great rings are forged in the " +
         "Second Age, and an old shadow stirs again in Middle-earth."
 

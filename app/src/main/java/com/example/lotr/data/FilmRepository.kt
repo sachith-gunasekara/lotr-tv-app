@@ -15,6 +15,7 @@ object FilmRepository {
             extendedRuntime = 228.minutes,
             filenameKeywords = listOf("fellowship"),
             backdropAtMs = 660_000L,
+            trailerYouTubeId = "UFNK8qznrPc",
         ),
         Film(
             id = "two_towers",
@@ -26,6 +27,7 @@ object FilmRepository {
             extendedRuntime = 235.minutes,
             filenameKeywords = listOf("towers", "two_towers", "two-towers"),
             backdropAtMs = 4_800_000L,
+            trailerYouTubeId = "WGAuIniKeEU",
         ),
         Film(
             id = "return_of_the_king",
@@ -37,6 +39,7 @@ object FilmRepository {
             extendedRuntime = 263.minutes,
             filenameKeywords = listOf("return"),
             backdropAtMs = 2_960_000L,
+            trailerYouTubeId = "JFpIPkJ31Uw",
         ),
     )
 

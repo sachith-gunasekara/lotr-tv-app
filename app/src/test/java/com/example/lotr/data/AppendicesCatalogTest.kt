@@ -31,6 +31,15 @@ class AppendicesCatalogTest {
     }
 
     @Test
+    fun homeBannerTrailersAreInTheCatalog() {
+        // So verify_catalog.py checks they're still up and embeddable.
+        val ids = videos.map { it.youtubeId }.toSet()
+        (FilmRepository.films.map { it.trailerYouTubeId } + RingsOfPower.TRAILER_YOUTUBE_ID).forEach {
+            assertTrue("trailer $it isn't in the catalog", it in ids)
+        }
+    }
+
+    @Test
     fun idsAreUniqueAcrossCategoriesAndShelves() {
         val ids = categories.map { it.id } + categories.flatMap { c -> c.shelves.map { it.id } }
         assertEquals(ids.size, ids.toSet().size)

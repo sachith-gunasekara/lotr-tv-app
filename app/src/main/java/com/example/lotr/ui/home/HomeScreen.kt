@@ -107,6 +107,10 @@ fun HomeScreen(
             watchable = featured,
             file = featuredFile,
             trailer = trailer,
+            youTubeTrailerId = when (featured) {
+                is Film -> featured.trailerYouTubeId
+                is Episode -> RingsOfPower.TRAILER_YOUTUBE_ID
+            },
             progress = progress,
             thumbnails = thumbnails,
             onActivate = { featuredFile?.let { onPlay(featured, it.uri) } ?: onOpen(HomeDestination.Films) },

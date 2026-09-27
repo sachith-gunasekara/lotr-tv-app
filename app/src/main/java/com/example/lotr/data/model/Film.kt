@@ -16,6 +16,8 @@ data class Film(
     val filenameKeywords: List<String>,
     /** Where in the film its backdrop still was taken, so a preview can start on that frame. */
     val backdropAtMs: Long,
+    /** Its theatrical trailer on YouTube (also in the Appendices catalog, so checked embeddable). */
+    val trailerYouTubeId: String,
 ) : Watchable {
     fun runtimeFor(tags: ReleaseTags?): Duration = if (tags?.extended == true) extendedRuntime else runtime
 
