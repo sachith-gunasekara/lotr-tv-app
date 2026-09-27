@@ -1,6 +1,7 @@
 package com.example.lotr.ui.home
 
 import android.net.Uri
+import android.view.ViewGroup
 import androidx.annotation.OptIn
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -24,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +43,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -62,18 +68,28 @@ import com.example.lotr.ui.components.backdropRes
 import com.example.lotr.ui.components.formatPlaybackTime
 import com.example.lotr.ui.library.EpisodePlaceholder
 import com.example.lotr.ui.theme.LotrBackground
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.options.IFramePlayerOptions
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView
 import kotlinx.coroutines.delay
 
 private const val PREVIEW_DELAY_MS = 5_000L
 private const val AMBIENT_LOOP_MS = 45_000L
 private val TextShadow = Shadow(color = Color.Black.copy(alpha = 0.7f), offset = Offset(2f, 3f), blurRadius = 8f)
 
+private const val YOUTUBE_START_TIMEOUT_MS = 12_000L
+
 /**
- * What the banner plays after resting a few seconds: a trailer from the drive (with sound), else a
- * muted loop of the title itself - for films, starting on the very frame the still came from, so
- * the picture simply comes alive.
+ * What the banner plays after resting a few seconds: a trailer from the drive (with sound), else
+ * the official trailer from YouTube, else (offline, say) a muted loop of the title itself - for
+ * films, starting on the very frame the still came from, so the picture simply comes alive.
  */
-private data class Preview(val uri: Uri, val startMs: Long?, val withSound: Boolean, val loops: Boolean)
+private sealed interface Preview {
+    data class File(val uri: Uri, val startMs: Long?, val withSound: Boolean, val loops: Boolean) : Preview
+    data class YouTube(val youtubeId: String) : Preview
+}
 
 /** The last-watched film or episode, large, with its still that turns into a trailer. */
 @Composable
@@ -81,14 +97,17 @@ fun HeroBanner(
     watchable: Watchable,
     file: FilmFile?,
     trailer: FilmFile?,
+    youTubeTrailerId: String?,
     progress: WatchProgress,
     thumbnails: ThumbnailRepository,
     onActivate: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var youTubeFailed by remember(watchable.id) { mutableStateOf(false) }
     val preview = when {
-        trailer != null -> Preview(trailer.uri, startMs = 0, withSound = true, loops = false)
-        file != null -> Preview(file.uri, startMs = (watchable as? Film)?.backdropAtMs, withSound = false, loops = true)
+        trailer != null -> Preview.File(trailer.uri, startMs = 0, withSound = true, loops = false)
+        youTubeTrailerId != null && !youTubeFailed -> Preview.YouTube(youTubeTrailerId)
+        file != null -> Preview.File(file.uri, startMs = (watchable as? Film)?.backdropAtMs, withSound = false, loops = true)
         else -> null
     }
     var previewStarted by remember(watchable.id, preview) { mutableStateOf(false) }
@@ -103,13 +122,22 @@ fun HeroBanner(
 
     WarmCard(onClick = onActivate, modifier = modifier) {
         HeroStill(watchable, file, thumbnails)
-        if (previewStarted && preview != null) {
-            AmbientPreview(
-                preview = preview,
-                onFirstFrame = { videoShowing = true },
-                onFinished = { videoShowing = false; previewStarted = false },
-                modifier = Modifier.fillMaxSize().alpha(videoAlpha),
-            )
+        if (previewStarted) {
+            val onFirstFrame = { videoShowing = true }
+            val onFinished = { videoShowing = false; previewStarted = false }
+            val previewModifier = Modifier.fillMaxSize().alpha(videoAlpha)
+            when (preview) {
+                is Preview.File -> AmbientPreview(preview, onFirstFrame, onFinished, previewModifier)
+                is Preview.YouTube -> YouTubePreview(
+                    youtubeId = preview.youtubeId,
+                    onFirstFrame = onFirstFrame,
+                    onFinished = onFinished,
+                    // Offline or refused: the title's own muted loop takes over.
+                    onFailed = { videoShowing = false; youTubeFailed = true },
+                    modifier = previewModifier,
+                )
+                null -> Unit
+            }
         }
         Box(
             Modifier
@@ -238,7 +266,7 @@ private fun ResumeChip(playable: Boolean, progress: WatchProgress) {
 @OptIn(UnstableApi::class)
 @Composable
 private fun AmbientPreview(
-    preview: Preview,
+    preview: Preview.File,
     onFirstFrame: () -> Unit,
     onFinished: () -> Unit,
     modifier: Modifier = Modifier,
@@ -299,4 +327,79 @@ private fun AmbientPreview(
         // real video arrives (or forever, if this device can't decode the file).
         shutter = {},
     )
+}
+
+/**
+ * The trailer from YouTube in the IFrame player, YouTube's controls hidden. The WebView never
+ * takes focus (the banner keeps the remote), and pauses with the app. No network means the
+ * player never gets going, so [onFailed] also fires if nothing plays within a few seconds.
+ */
+@Composable
+private fun YouTubePreview(
+    youtubeId: String,
+    onFirstFrame: () -> Unit,
+    onFinished: () -> Unit,
+    onFailed: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    // The player's listener outlives recompositions, so it calls the latest callbacks.
+    val currentOnFirstFrame by rememberUpdatedState(onFirstFrame)
+    val currentOnFinished by rememberUpdatedState(onFinished)
+    val currentOnFailed by rememberUpdatedState(onFailed)
+    var playing by remember(youtubeId) { mutableStateOf(false) }
+    var player by remember(youtubeId) { mutableStateOf<YouTubePlayer?>(null) }
+    val playerView = remember(youtubeId) {
+        YouTubePlayerView(context).apply {
+            enableAutomaticInitialization = false
+            isFocusable = false
+            descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        }
+    }
+
+    LaunchedEffect(youtubeId) {
+        val options = IFramePlayerOptions.Builder(context).controls(0).rel(0).ivLoadPolicy(3).build()
+        playerView.initialize(
+            object : AbstractYouTubePlayerListener() {
+                override fun onReady(youTubePlayer: YouTubePlayer) {
+                    player = youTubePlayer
+                    youTubePlayer.setVolume(60)
+                    youTubePlayer.loadVideo(youtubeId, 0f)
+                }
+
+                override fun onStateChange(youTubePlayer: YouTubePlayer, state: PlayerConstants.PlayerState) {
+                    when (state) {
+                        PlayerConstants.PlayerState.PLAYING -> if (!playing) { playing = true; currentOnFirstFrame() }
+                        PlayerConstants.PlayerState.ENDED -> currentOnFinished()
+                        else -> Unit
+                    }
+                }
+
+                override fun onError(youTubePlayer: YouTubePlayer, error: PlayerConstants.PlayerError) = currentOnFailed()
+            },
+            options,
+        )
+        delay(YOUTUBE_START_TIMEOUT_MS)
+        if (!playing) currentOnFailed()
+    }
+
+    DisposableEffect(lifecycleOwner, player) {
+        val observer = LifecycleEventObserver { _, event ->
+            // The WebView would otherwise keep playing behind other apps.
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> player?.pause()
+                Lifecycle.Event.ON_RESUME -> if (playing) player?.play()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    DisposableEffect(playerView) {
+        onDispose { playerView.release() }
+    }
+
+    AndroidView(factory = { playerView }, modifier = modifier)
 }
