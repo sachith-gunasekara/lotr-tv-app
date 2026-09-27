@@ -2,11 +2,12 @@
 // landmarks, and travellers walking the journeys. Driven entirely by the TV remote, whose keys
 // the app forwards as World.key(...); state goes back through window.Android.onState(json).
 import * as THREE from 'three';
-import { makeFigure, makePony, makeCart, makeRider } from './figures.js';
+import { makePony } from './figures.js';
 import { makeCharacter } from './characters.js';
 import { SCENES, COMPANIES } from './scenes.js';
-import { loadModels, updateModels, modelFor } from './models.js';
+import { updateRigs, retire } from './rig.js';
 import { buildLandmark } from './landmarks.js';
+import { buildLife } from './life.js';
 
 const HEIGHT_KM = 22;       // DEM 255 -> 22 km: several times real, so mountains read as mountains
 const SEA_Y = 0.05;
@@ -37,9 +38,10 @@ const animated = [];        // things with update(dt, t)
 const rig = { x: 0, z: 0, dist: 140, yaw: 0, pitch: 0.95 };
 const goal = { ...rig };
 
-let journey = null;
-let sceneLook = null;       // world point the camera frames while a scene plays         // { stops: [...], curve, travellers, t, toT, stop }
+let journey = null;         // { stopIds, curve, stopT, t, toT, stop, walking, scene, ... }
+let sceneLook = null;       // world point the camera frames while a scene plays
 let picked = null;
+let life = null;            // update(dt, t, focus) for the folk of every place, in the open world
 
 // --- Terrain -------------------------------------------------------------------------------
 
@@ -196,10 +198,12 @@ function startJourney(spec) {
     return new THREE.Vector3(p.x, 0, p.z);
   });
   const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+  // Positions along the road are fractions of its length (getPointAt), so a step is the same
+  // distance on the ground on a long leg as on a short one.
   const samples = 900;
   const draped = [];
   for (let i = 0; i <= samples; i++) {
-    const p = curve.getPoint(i / samples);
+    const p = curve.getPointAt(i / samples);
     draped.push(new THREE.Vector3(p.x, Math.max(heightAt(p.x, p.z), SEA_Y) + 0.12, p.z));
   }
   const road = new THREE.CatmullRomCurve3(draped);
@@ -209,8 +213,12 @@ function startJourney(spec) {
   const done = new THREE.Mesh(doneGeo, new THREE.MeshBasicMaterial({ color: 0xf0d97d }));
   scene.add(ahead, done);
 
-  // Where each stop falls along the curve (Catmull-Rom passes through its points at i/(n-1)).
-  const stopT = spec.stops.map((_, i) => i / (spec.stops.length - 1));
+  // Where each stop falls along the road: Catmull-Rom passes through its points at t = i/(n-1),
+  // turned into a fraction of the road's length.
+  const divisions = 4000;
+  const lengths = curve.getLengths(divisions);
+  const length = lengths[divisions];
+  const stopT = spec.stops.map((_, i) => lengths[Math.round((i / (spec.stops.length - 1)) * divisions)] / length);
   const group = new THREE.Group();
   group.scale.setScalar(TRAVELLER_SCALE);
   scene.add(group);
@@ -227,13 +235,13 @@ function startJourney(spec) {
     members[id] = c;
   }
   if (spec.id === 'there_and_back_again') {
-    const pony = modelFor('pony') || makePony(0x6a4a30);
+    const pony = makePony(0x6a4a30);
     pony.visible = false;
     group.add(pony);
     members.pony = pony;
     legs.push(['pony', 0, 2]);
   }
-  journey = { spec, stopIds: spec.stops, road, curve, stopT, doneGeo, group, members, legs, t: 0, toT: 0, stop: 0, walking: false, samples, scene: null };
+  journey = { spec, stopIds: spec.stops, road, curve, stopT, length, doneGeo, group, members, legs, t: 0, toT: 0, stop: 0, walking: false, pace: 0, stepRate: 1, samples, scene: null };
   placeTravellers(0, 0);
   setDone(0);
 }
@@ -241,6 +249,24 @@ function startJourney(spec) {
 function setDone(t) {
   // TubeGeometry indices run along the path: radialSegments * 6 per segment.
   journey.doneGeo.setDrawRange(0, Math.floor(t * journey.samples) * 6 * 6);
+}
+
+/** Where t (a fraction of the road) falls between the stops: 0..n-1, fractional between them. */
+function stopAt(t) {
+  const st = journey.stopT;
+  for (let i = 0; i < st.length - 1; i++) {
+    if (t <= st[i + 1]) return i + Math.max(0, Math.min(1, (t - st[i]) / (st[i + 1] - st[i] || 1)));
+  }
+  return st.length - 1;
+}
+
+/**
+ * How fast the company goes along a leg of [km] kilometres, in km/s. Nearly a steady walk:
+ * a long leg is a little quicker than a short one (so the long roads don't drag), but only a
+ * little - the time grows with the distance, from ~8 s for Bree to Weathertop to ~25 s across Rohan.
+ */
+function legSpeed(km) {
+  return Math.min(16, Math.max(4, 7 * Math.pow(km / 80, 0.45)));
 }
 
 /** Who's walking at this point of the road: stops are 0..n-1 along it. */
@@ -253,15 +279,15 @@ function presentAt(stopF) {
 }
 
 function placeTravellers(t, dt) {
-  const p = journey.curve.getPoint(Math.min(1, Math.max(0, t)));
-  const ahead = journey.curve.getPoint(Math.min(1, t + 0.002));
+  const p = journey.curve.getPointAt(Math.min(1, Math.max(0, t)));
+  const ahead = journey.curve.getPointAt(Math.min(1, t + 0.002));
   const y = Math.max(heightAt(p.x, p.z), SEA_Y);
   journey.group.position.set(p.x, y, p.z);
   const heading = Math.atan2(ahead.x - p.x, ahead.z - p.z);
   if (!journey.scene && Number.isFinite(heading) && (ahead.x !== p.x || ahead.z !== p.z)) journey.group.rotation.y = heading;
 
   // The company, two abreast (bigger folk take more room), in story order.
-  const here = presentAt(t * (journey.stopIds.length - 1));
+  const here = presentAt(stopAt(t));
   let row = 0, col = 0;
   for (const [id, m] of Object.entries(journey.members)) {
     const present = here.includes(id);
@@ -280,7 +306,8 @@ function placeTravellers(t, dt) {
       col = 1 - col;
       if (col === 0) row++;
     }
-    m.userData.walk(journey.walking ? dt : 0);
+    // Legs keep up with the road: quicker steps on the faster long legs.
+    m.userData.walk(journey.walking ? dt * journey.stepRate : 0);
   }
   return heading;
 }
@@ -345,6 +372,23 @@ function startScene(index) {
       }
       return (top - g.position.y) / TRAVELLER_SCALE;
     },
+    /** Keeps company members out of this scene (they're elsewhere in the story). */
+    hide(...ids) {
+      for (const id of ids) {
+        const m = journey.members[id];
+        if (m && m.visible) {
+          m.userData.held = true;
+          held.push({ m, opacity: [] });
+          m.visible = false;
+        }
+      }
+    },
+    /** Where one of a figure's joints is, in local space ('handR', 'upperL', 'head', ...). */
+    joint(obj, name) {
+      const j = obj.userData.joints?.[name];
+      g.updateMatrixWorld(true);
+      return j ? g.worldToLocal(j.getWorldPosition(new THREE.Vector3())) : obj.position.clone();
+    },
     /** Where the camera looks during the scene (local space). */
     focus(x, y, z) { focus.set(x, y, z); },
   };
@@ -359,11 +403,16 @@ function stopScene() {
   if (!s) return;
   for (const o of s.added) {
     journey.group.remove(o);
-    o.traverse((c) => { c.geometry?.dispose?.(); });
+    retire(o);
+    o.traverse((c) => { if (!c.geometry?.userData.shared) c.geometry?.dispose?.(); });
   }
   for (const { m, opacity } of s.held) {
     m.userData.held = false;
     m.userData.lift = 0;
+    delete m.userData.ground;
+    for (const k of Object.keys(m.userData.pose || {})) delete m.userData.pose[k];
+    m.userData.act?.('idle');
+    m.userData.running?.(false);
     m.rotation.set(0, 0, 0);
     m.scale.setScalar(1);
     m.visible = true;
@@ -387,6 +436,7 @@ function goToStop(i) {
   stopScene();
   journey.stop = Math.max(0, Math.min(journey.stopIds.length - 1, i));
   journey.toT = journey.stopT[journey.stop];
+  if (!journey.walking) journey.pace = 0;
   journey.walking = true;
   report();
 }
@@ -458,9 +508,15 @@ function frame() {
   if (journey) {
     if (journey.walking) {
       const dir = Math.sign(journey.toT - journey.t);
-      // Walk at a steady pace along the road, whatever the distance between stops.
-      const speed = 0.028;
-      journey.t += dir * speed * dt;
+      // The leg they're on sets the pace; they ease off as they come to the stop.
+      const at = Math.min(journey.stopT.length - 2, Math.floor(stopAt(journey.t + dir * 1e-6)));
+      const legKm = (journey.stopT[at + 1] - journey.stopT[at]) * journey.length;
+      const kmps = legSpeed(legKm);
+      const leftKm = Math.abs(journey.toT - journey.t) * journey.length;
+      journey.pace = Math.min(1, journey.pace + dt * 0.8);
+      const ease = Math.min(journey.pace, Math.max(0.3, Math.min(1, leftKm / (kmps * 1.2))));
+      journey.t += dir * (kmps * ease / journey.length) * dt;
+      journey.stepRate = Math.max(0.35, ease) * Math.min(1.5, Math.max(0.85, kmps / 7));
       if ((dir > 0 && journey.t >= journey.toT) || (dir < 0 && journey.t <= journey.toT) || dir === 0) {
         journey.t = journey.toT;
         journey.walking = false;
@@ -509,7 +565,8 @@ function frame() {
   scene.fog.far = rig.dist * 10 + 700;
 
   for (const a of animated) a.update(dt, t);
-  updateModels(dt);
+  if (life) life(dt, t, { x: rig.x, z: rig.z, dist: rig.dist });
+  updateRigs(dt);
   renderer.render(scene, camera);
   updateLabels();
   requestAnimationFrame(frame);
@@ -524,43 +581,10 @@ function angleDiff(from, to) {
   return d;
 }
 
-// --- Ambient life in the open world -----------------------------------------------------------
-
-function addWanderer(obj, pathIds, speed) {
-  const pts = pathIds.map((p) => (typeof p === 'string' ? new THREE.Vector3(places[p].x, 0, places[p].z) : new THREE.Vector3(p[0], 0, p[1])));
-  const curve = new THREE.CatmullRomCurve3(pts, true);
-  obj.scale.setScalar(2.2);
-  scene.add(obj);
-  let u = Math.random();
-  animated.push({
-    update(dt) {
-      u = (u + speed * dt) % 1;
-      const p = curve.getPoint(u), q = curve.getPoint((u + 0.002) % 1);
-      obj.position.set(p.x, Math.max(heightAt(p.x, p.z), SEA_Y), p.z);
-      obj.rotation.y = Math.atan2(q.x - p.x, q.z - p.z);
-      obj.userData.walk?.(dt);
-    },
-  });
-}
-
-function addLife() {
-  const h = places.hobbiton, b = places.bree, e = places.edoras;
-  // Gandalf's cart, coming into Hobbiton along the road.
-  addWanderer(makeCart(), [[h.x - 6, h.z - 2], [h.x + 8, h.z + 1], [h.x + 20, h.z], [h.x + 8, h.z + 5]], 0.012);
-  // Hobbits out walking in the Shire, and on the road to Bree.
-  addWanderer(makeFigure({ cloak: 0x4a5a30, body: 0x8a5a2a, height: 0.6 }), [[h.x - 3, h.z + 3], [h.x + 3, h.z + 6], [h.x + 5, h.z + 1]], 0.02);
-  addWanderer(makeFigure({ cloak: 0x5a4a30, body: 0x6a6a3a, height: 0.62, pack: true }), [[h.x, h.z], [b.x, b.z]], 0.004);
-  // Riders of Rohan on the plains below Edoras.
-  for (let i = 0; i < 3; i++) {
-    addWanderer(makeRider(0x6a4a30 + i * 0x101008), [[e.x + 6 + i, e.z - 8], [e.x + 22, e.z - 14 - i * 2], [e.x + 30, e.z - 2], [e.x + 14, e.z + 4]], 0.006 + i * 0.001);
-  }
-}
-
 // --- Start --------------------------------------------------------------------------------
 
 World.start = async (config) => {
   World.data = await (await fetch('places.json')).json();
-  await loadModels();
   terrainW = World.data.widthKm;
   terrainH = World.data.heightKm;
   await loadHeights();
@@ -594,10 +618,14 @@ World.start = async (config) => {
     if (config.startStop) {
       journey.stop = config.startStop;
       journey.t = journey.toT = journey.done = journey.stopT[config.startStop];
-      placeTravellers(journey.t, 0);
-      goal.x = rig.x = journey.group.position.x;
-      goal.z = rig.z = journey.group.position.z;
     }
+    const heading = placeTravellers(journey.t, 0);
+    goal.x = rig.x = journey.group.position.x;
+    goal.z = rig.z = journey.group.position.z;
+    // Put the camera where it would be had they just walked in, so the scene is staged facing
+    // away from it (startScene turns the scene by where the camera is).
+    if (Number.isFinite(heading)) goal.yaw = rig.yaw = heading + Math.PI;
+    camera.position.set(rig.x - Math.sin(rig.yaw) * rig.dist, journey.group.position.y + rig.dist, rig.z + Math.cos(rig.yaw) * rig.dist);
     startScene(journey.stop);
     // For testing: start the scene part-way through (?t=seconds), and freeze it there (?freeze).
     if (journey.scene && config.sceneTime) journey.scene.t = config.sceneTime;
@@ -605,7 +633,7 @@ World.start = async (config) => {
     if (config.go !== undefined) setTimeout(() => goToStop(config.go), 800);
     if (config.go !== undefined) setInterval(() => { document.title = JSON.stringify({ t: journey.t, toT: journey.toT, walking: journey.walking, stop: journey.stop, scene: !!journey.scene, err: window.__lastError }); }, 1000);
   } else {
-    addLife();
+    life = buildLife(scene, { places, heightAt, seaY: SEA_Y });
     const start = places[config.startAt || 'hobbiton'];
     goal.x = rig.x = start.x;
     goal.z = rig.z = start.z;

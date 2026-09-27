@@ -1,188 +1,176 @@
-// Low-poly travellers, built from primitives so no model files (or licences) are needed.
-// Each figure's userData.walk(dt) swings its legs and arms; walk(0) lets them come to rest.
+// Horses, ponies, riders and Gandalf's cart, built from primitives. Each has userData.walk(dt):
+// the legs step in a four-beat walk (or gallop, when userData.gallop is set); walk(0) rests.
 import * as THREE from 'three';
-import { modelFor } from './models.js';
+import { buildRig } from './rig.js';
+import { CHARACTERS, folkSpec } from './characters.js';
 
-// A little self-light, so the figures stay readable on their shaded side.
-const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, flatShading: true, emissive: color, emissiveIntensity: 0.22, ...extra });
-const SKIN = 0xd9b08c;
+const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, flatShading: true, emissive: color, emissiveIntensity: 0.2, ...extra });
 
-function limb(w, h, color) {
-  // Pivot at the top, so rotating swings it from the hip or shoulder.
-  const g = new THREE.Group();
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), mat(color));
-  m.position.y = -h / 2;
-  g.add(m);
-  return g;
+/** A leg in two parts - forearm/gaskin and cannon with hoof - jointed at the knee or hock. */
+function horseLeg(s, color, hind) {
+  const hip = new THREE.Group();
+  const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.055 * s, 0.04 * s, 0.3 * s, 6), mat(color));
+  upper.position.y = -0.15 * s;
+  hip.add(upper);
+  const knee = new THREE.Group();
+  knee.position.y = -0.3 * s;
+  const lower = new THREE.Mesh(new THREE.CylinderGeometry(0.028 * s, 0.025 * s, 0.27 * s, 5), mat(color));
+  lower.position.y = -0.135 * s;
+  const hoof = new THREE.Mesh(new THREE.CylinderGeometry(0.035 * s, 0.042 * s, 0.05 * s, 6), mat(0x2a221c));
+  hoof.position.y = -0.285 * s;
+  knee.add(lower, hoof);
+  hip.add(knee);
+  hip.userData.knee = knee;
+  hip.userData.hind = hind;
+  return hip;
 }
 
 /**
- * A person: legs, body, cloak, head and hair, with optional pack, beard, wizard's hat, staff,
- * sword, bow or axe. [height] is roughly their height in the world (hobbits ~0.6, men ~1).
+ * A horse, [size] its height at the withers (a horse ~0.9 beside a Man of 1, a pony ~0.55),
+ * with an arched neck, a long head, mane and tail. [saddle] adds a saddle and bridle.
  */
-export function makeFigure({ cloak = 0x445533, body = 0x6b4a2a, hair = 0x3a2616, height = 1, pack, beard, hat, staff, sword, bow, axe, stout } = {}) {
-  const fig = new THREE.Group();
-  const s = height;
-  const wide = stout ? 1.35 : 1;
-  const legH = 0.42 * s, torsoH = 0.36 * s;
-
-  const legL = limb(0.1 * s * wide, legH, 0x3a2c20), legR = limb(0.1 * s * wide, legH, 0x3a2c20);
-  legL.position.set(-0.07 * s * wide, legH, 0);
-  legR.position.set(0.07 * s * wide, legH, 0);
-  fig.add(legL, legR);
-
-  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.12 * s * wide, 0.15 * s * wide, torsoH, 7), mat(body));
-  torso.position.y = legH + torsoH / 2;
-  fig.add(torso);
-
-  const cape = new THREE.Mesh(new THREE.ConeGeometry(0.24 * s * wide, legH + torsoH * 0.95, 8, 1, true), mat(cloak, { side: THREE.DoubleSide }));
-  cape.position.set(0, (legH + torsoH) / 2 + 0.06 * s, -0.03 * s);
-  fig.add(cape);
-
-  const armL = limb(0.07 * s, 0.34 * s, cloak), armR = limb(0.07 * s, 0.34 * s, cloak);
-  armL.position.set(-0.17 * s * wide, legH + torsoH * 0.95, 0);
-  armR.position.set(0.17 * s * wide, legH + torsoH * 0.95, 0);
-  fig.add(armL, armR);
-
-  const headY = legH + torsoH + 0.11 * s;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.1 * s, 10, 8), mat(SKIN));
-  head.position.y = headY;
-  fig.add(head);
-  const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.105 * s, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), mat(hair));
-  hairCap.position.y = headY + 0.01 * s;
-  hairCap.rotation.x = -0.25;
-  fig.add(hairCap);
-
-  if (beard) {
-    const b = new THREE.Mesh(new THREE.ConeGeometry(0.08 * s, 0.22 * s, 7), mat(hair));
-    b.rotation.x = Math.PI;
-    b.position.set(0, headY - 0.12 * s, 0.06 * s);
-    fig.add(b);
-  }
-  if (hat) {
-    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.2 * s, 0.2 * s, 0.02 * s, 12), mat(cloak));
-    brim.position.y = headY + 0.07 * s;
-    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.1 * s, 0.34 * s, 10), mat(cloak));
-    cone.position.y = headY + 0.24 * s;
-    cone.rotation.z = 0.2;
-    fig.add(brim, cone);
-  }
-  if (pack) {
-    const p = new THREE.Mesh(new THREE.BoxGeometry(0.22 * s, 0.26 * s, 0.14 * s), mat(0x5a4028));
-    p.position.set(0, legH + torsoH * 0.7, -0.17 * s);
-    fig.add(p);
-  }
-  if (staff) {
-    const st = new THREE.Mesh(new THREE.CylinderGeometry(0.018 * s, 0.018 * s, 1.1 * s, 5), mat(0x6a4a2a));
-    st.position.set(0.1 * s, -0.3 * s, 0.05 * s);
-    armR.add(st);
-  }
-  if (sword) {
-    const sw = new THREE.Mesh(new THREE.BoxGeometry(0.03 * s, 0.5 * s, 0.03 * s), mat(0xc8c8c8, { metalness: 0.6, roughness: 0.3 }));
-    sw.position.set(-0.2 * s, legH + 0.05 * s, 0.02 * s);
-    sw.rotation.z = 0.25;
-    fig.add(sw);
-  }
-  if (bow) {
-    const bw = new THREE.Mesh(new THREE.TorusGeometry(0.28 * s, 0.012 * s, 4, 12, Math.PI), mat(0x8a6a3a));
-    bw.position.set(0, legH + torsoH * 0.7, -0.16 * s);
-    bw.rotation.set(0, Math.PI / 2, Math.PI / 2);
-    fig.add(bw);
-  }
-  if (axe) {
-    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.02 * s, 0.02 * s, 0.5 * s, 5), mat(0x5a3a1a));
-    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.16 * s, 0.12 * s, 0.02 * s), mat(0xb0b0b0, { metalness: 0.6, roughness: 0.3 }));
-    blade.position.set(0.07 * s, 0.2 * s, 0);
-    handle.add(blade);
-    handle.position.set(0.02 * s, -0.25 * s, 0.05 * s);
-    armR.add(handle);
-  }
-
-  let phase = Math.random() * 6;
-  fig.userData.walk = (dt) => {
-    if (dt > 0) phase += dt * 7;
-    const swing = dt > 0 ? Math.sin(phase) * 0.6 : 0;
-    legL.rotation.x += (swing - legL.rotation.x) * 0.3;
-    legR.rotation.x += (-swing - legR.rotation.x) * 0.3;
-    armL.rotation.x += (-swing * 0.7 - armL.rotation.x) * 0.3;
-    armR.rotation.x += (swing * 0.7 - armR.rotation.x) * 0.3;
-    torso.position.y = legH + torsoH / 2 + (dt > 0 ? Math.abs(Math.cos(phase)) * 0.02 * s : 0);
-  };
-  return fig;
-}
-
-/** A pony (or, bigger, a horse), trotting with the same walk(dt). */
-export function makePony(color = 0x6a4a30, size = 0.8) {
+export function makeHorse(color = 0x7a5a3a, black = false, { size = 0.9, saddle = true, mane = 0x2a1a10 } = {}) {
+  const s = size / 0.9;
+  const coat = black ? 0x0c0b0a : color;
+  const hair = black ? 0x050505 : mane;
   const g = new THREE.Group();
-  const s = size;
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.34 * s, 0.34 * s, 0.8 * s), mat(color));
-  body.position.y = 0.62 * s;
+  const body = new THREE.Group();
+  body.position.y = 0.66 * s;
   g.add(body);
-  const neck = new THREE.Mesh(new THREE.BoxGeometry(0.16 * s, 0.4 * s, 0.18 * s), mat(color));
-  neck.position.set(0, 0.88 * s, 0.4 * s);
-  neck.rotation.x = 0.5;
-  g.add(neck);
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.15 * s, 0.16 * s, 0.34 * s), mat(color));
-  head.position.set(0, 1.04 * s, 0.56 * s);
-  g.add(head);
-  const mane = new THREE.Mesh(new THREE.BoxGeometry(0.05 * s, 0.34 * s, 0.14 * s), mat(0x2a1a10));
-  mane.position.set(0, 0.95 * s, 0.34 * s);
-  mane.rotation.x = 0.5;
-  g.add(mane);
-  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.06 * s, 0.4 * s, 5), mat(0x2a1a10));
-  tail.position.set(0, 0.56 * s, -0.48 * s);
-  tail.rotation.x = -0.5;
-  g.add(tail);
-  const legs = [[-0.11, 0.3], [0.11, 0.3], [-0.11, -0.3], [0.11, -0.3]].map(([x, z]) => {
-    const l = limb(0.08 * s, 0.46 * s, color);
-    l.position.set(x * s, 0.46 * s, z * s);
-    g.add(l);
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.2 * s, 0.19 * s, 0.78 * s, 9), mat(coat));
+  barrel.rotation.x = Math.PI / 2;
+  barrel.scale.set(0.9, 1, 1.08);
+  body.add(barrel);
+  const chest = new THREE.Mesh(new THREE.SphereGeometry(0.2 * s, 9, 7), mat(coat));
+  chest.position.z = 0.36 * s;
+  chest.scale.set(0.9, 1.05, 0.9);
+  const rump = new THREE.Mesh(new THREE.SphereGeometry(0.2 * s, 9, 7), mat(coat));
+  rump.position.set(0, 0.02 * s, -0.36 * s);
+  body.add(chest, rump);
+  // Neck and head, arched up and forward.
+  const neck = new THREE.Group();
+  neck.position.set(0, 0.1 * s, 0.4 * s);
+  neck.rotation.x = 0.75;
+  body.add(neck);
+  const neckMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.09 * s, 0.15 * s, 0.46 * s, 7), mat(coat));
+  neckMesh.position.y = 0.2 * s;
+  neckMesh.scale.z = 1.25;
+  neck.add(neckMesh);
+  const maneMesh = new THREE.Mesh(new THREE.BoxGeometry(0.04 * s, 0.46 * s, 0.1 * s), mat(hair));
+  maneMesh.position.set(0, 0.22 * s, -0.12 * s);
+  neck.add(maneMesh);
+  const head = new THREE.Group();
+  head.position.y = 0.44 * s;
+  head.rotation.x = 1.34;
+  neck.add(head);
+  const skull = new THREE.Mesh(new THREE.CylinderGeometry(0.05 * s, 0.085 * s, 0.34 * s, 7), mat(coat));
+  skull.position.y = 0.12 * s;
+  skull.scale.z = 1.2;
+  head.add(skull);
+  for (const x of [-1, 1]) {
+    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.025 * s, 0.09 * s, 4), mat(coat));
+    ear.position.set(x * 0.045 * s, -0.04 * s, -0.08 * s);
+    ear.rotation.x = -1.2;
+    head.add(ear);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.014 * s, 5, 4), new THREE.MeshBasicMaterial({ color: black ? 0xff3010 : 0x0a0806 }));
+    eye.position.set(x * 0.07 * s, 0.02 * s, -0.02 * s);
+    head.add(eye);
+  }
+  if (saddle) {
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.34 * s, 0.06 * s, 0.34 * s), mat(black ? 0x1a1a1a : 0x4a2a18));
+    seat.position.set(0, 0.2 * s, 0.02 * s);
+    const cloth = new THREE.Mesh(new THREE.BoxGeometry(0.44 * s, 0.26 * s, 0.4 * s), mat(black ? 0x101010 : 0x2f4a2a));
+    cloth.position.set(0, 0.08 * s, 0.02 * s);
+    body.add(cloth, seat);
+    const reins = new THREE.Mesh(new THREE.TorusGeometry(0.1 * s, 0.006 * s, 3, 8, Math.PI), mat(0x2a1a10));
+    reins.position.set(0, 0.25 * s, 0.25 * s);
+    reins.rotation.set(-0.4, 0, 0);
+    body.add(reins);
+  }
+  // The tail, which swishes.
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.1 * s, -0.52 * s);
+  body.add(tail);
+  const tailMesh = new THREE.Mesh(new THREE.ConeGeometry(0.06 * s, 0.5 * s, 5), mat(hair));
+  tailMesh.position.y = -0.22 * s;
+  tailMesh.rotation.x = Math.PI;
+  tail.add(tailMesh);
+  tail.rotation.x = 0.35;
+
+  // Legs: fore at the shoulder, hind at the hip.
+  const legs = [[-0.11, 0.3, false], [0.11, 0.3, false], [-0.11, -0.32, true], [0.11, -0.32, true]].map(([x, z, hind]) => {
+    const l = horseLeg(s, coat, hind);
+    l.position.set(x * s, -0.06 * s, z * s);
+    body.add(l);
     return l;
   });
-  let phase = Math.random() * 6;
-  g.userData.walk = (dt) => {
-    if (dt > 0) phase += dt * 8;
+  // Walk: four beats, each leg a quarter out of step (LH, LF, RH, RF); gallop: pairs, bounding.
+  const offsets = [0.25, 0.75, 0, 0.5];
+  let phase = Math.random() * 6, moving = 0;
+  const pose = (dt, t) => {
+    const gallop = g.userData.gallop;
+    if (dt > 0) phase += dt * (gallop ? 11 : 6.5);
+    moving += ((dt > 0 ? 1 : 0) - moving) * Math.min(1, Math.max(dt, 0.016) * 6);
     legs.forEach((l, i) => {
-      const target = dt > 0 ? Math.sin(phase + (i % 3 === 0 ? 0 : Math.PI)) * 0.5 : 0;
-      l.rotation.x += (target - l.rotation.x) * 0.3;
+      const p = phase + offsets[i] * Math.PI * 2 * (gallop ? 0.4 : 1);
+      const swing = Math.sin(p) * (gallop ? 0.75 : 0.4) * moving;
+      l.rotation.x = swing;
+      const lift = Math.max(0, Math.cos(p)) * (gallop ? 1.2 : 0.7) * moving;
+      l.userData.knee.rotation.x = l.userData.hind ? -lift * 0.8 : lift;
     });
+    body.position.y = 0.66 * s + (gallop ? Math.abs(Math.sin(phase)) * 0.05 * s : Math.abs(Math.sin(phase * 2)) * 0.01 * s) * moving;
+    body.rotation.x = gallop ? Math.sin(phase) * 0.06 * moving : 0;
+    neck.rotation.x = 0.75 + Math.sin(phase * 2) * 0.06 * moving + (1 - moving) * Math.sin((t ?? phase) * 0.4) * 0.15;
+    tail.rotation.z = Math.sin((t ?? phase) * 1.3) * 0.25;
   };
+  // At rest the horse still shifts its head and swishes its tail.
+  let clock = 0;
+  g.userData.walk = (dt) => { clock += Math.max(dt, 0.016); pose(dt, clock); };
+  g.userData.saddleY = 0.66 * s + 0.23 * s;
   return g;
 }
 
-/** A horse: the bundled model if there is one ([black] for the Nazgûl), else a built one. */
-export function makeHorse(color = 0x7a5a3a, black = false) {
-  return modelFor(black ? 'black_horse' : 'horse') || makePony(color, 1.2);
+/** A pony for hobbits and dwarves: small, shaggy, no saddle-cloth. */
+export function makePony(color = 0x6a4a30, size = 0.55) {
+  return makeHorse(color, false, { size, saddle: false, mane: 0x3a2a1a });
 }
 
-/** A horse with a rider of Rohan: green cloak, helm and spear. */
-export function makeRider(color = 0x7a5a3a) {
+/**
+ * A horse and its rider. [who] is a character id or folk kind ('rohan' by default); the rider
+ * sits astride with the reins, and walk(dt) moves the horse under them.
+ */
+export function makeRider(color = 0x6a4a30, who = 'rohan', { black = false } = {}) {
   const g = new THREE.Group();
-  const horse = makeHorse(color);
+  const horse = makeHorse(color, black);
   g.add(horse);
-  const rider = makeFigure({ cloak: 0x2f4a2a, body: 0x6a6a60, height: 0.9, hair: 0x9a9a90 });
-  rider.position.set(0, 0.62, 0);
-  rider.scale.setScalar(0.95);
+  const named = CHARACTERS[who] && !CHARACTERS[who].folk;
+  const v = Math.floor(Math.random() * 4);
+  const spec = named ? CHARACTERS[who] : folkSpec(CHARACTERS[who]?.folk || who, v);
+  const rider = buildRig(spec, named ? who : `${who}:${v}`);
+  rider.userData.act('ride');
+  const d = rider.userData.rig.d;
+  rider.position.set(0, horse.userData.saddleY - d.legs, 0.02);
   g.add(rider);
-  const spear = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1.6, 5), mat(0x6a4a2a));
-  spear.position.set(0.25, 1.4, 0.1);
-  spear.rotation.x = 0.35;
-  g.add(spear);
-  g.userData.walk = horse.userData.walk;
+  g.userData.rider = rider;
+  g.userData.horse = horse;
+  g.userData.walk = (dt) => {
+    horse.userData.walk(dt);
+    horse.userData.gallop = g.userData.gallop;
+  };
   return g;
 }
 
 /** Gandalf's cart: a pony, a wooden cart with turning wheels, and the grey wizard at the reins. */
 export function makeCart() {
   const g = new THREE.Group();
-  const pony = makePony(0x8a8a82, 0.85);
-  pony.position.z = 0.9;
+  const pony = makePony(0x8a8a82, 0.55);
+  pony.position.z = 0.85;
   g.add(pony);
-  const bed = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.2, 0.9), mat(0x7a5530));
-  bed.position.y = 0.5;
+  const bed = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.18, 0.9), mat(0x7a5530));
+  bed.position.y = 0.48;
   g.add(bed);
-  const load = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.25, 0.5), mat(0xa08050));
-  load.position.set(0, 0.72, -0.15);
+  const load = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.25, 0.4), mat(0xa08050));
+  load.position.set(0, 0.7, -0.2);
   g.add(load);
   const wheels = [-0.4, 0.4].map((x) => {
     const w = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.04, 5, 12), mat(0x4a3420));
@@ -191,8 +179,9 @@ export function makeCart() {
     g.add(w);
     return w;
   });
-  const wizard = makeFigure({ cloak: 0x8b8b88, body: 0x6f6f6c, height: 0.9, hat: true, beard: true, hair: 0xd8d8d0 });
-  wizard.position.set(0, 0.45, 0.2);
+  const wizard = buildRig(CHARACTERS.gandalf, 'gandalf');
+  wizard.userData.act('sit');
+  wizard.position.set(0, 0.57 - wizard.userData.rig.d.legs * 0.5, 0.2);
   g.add(wizard);
   g.userData.walk = (dt) => {
     pony.userData.walk(dt);
