@@ -19,6 +19,7 @@ import androidx.lifecycle.lifecycleScope
 import com.example.lotr.data.AppendicesRepository
 import com.example.lotr.data.Atlas
 import com.example.lotr.data.FilmLibrary
+import com.example.lotr.data.HomeMusic
 import com.example.lotr.data.MapTileRepository
 import com.example.lotr.data.MusicRepository
 import com.example.lotr.data.PlaceMusic
@@ -29,8 +30,9 @@ import com.example.lotr.data.YouTubeVideo
 import com.example.lotr.data.readableName
 import com.example.lotr.data.model.Watchable
 import com.example.lotr.ui.appendices.AppendicesScreen
-import com.example.lotr.ui.components.PlaceBackgroundMusic
+import com.example.lotr.ui.components.BackgroundMusicMemory
 import com.example.lotr.ui.components.ShireBackgroundMusic
+import com.example.lotr.ui.components.YouTubeBackgroundMusic
 import com.example.lotr.ui.home.HomeDestination
 import com.example.lotr.ui.library.LibraryScreen
 import com.example.lotr.ui.music.MusicScreen
@@ -89,6 +91,9 @@ private val Screen.hasPlaceMusic: Boolean
 /** How long a place must stay in view before its music takes over, so panning past doesn't flick between cues. */
 private const val PLACE_SETTLE_MS = 1_500L
 
+/** The Home score's YouTube volume (0-100): a little fuller than the quiet map music. */
+private const val HOME_MUSIC_VOLUME = 45
+
 class MainActivity : ComponentActivity() {
     private val storageRepository by lazy { StorageRepository(applicationContext) }
     private val filmLibrary by lazy { FilmLibrary(storageRepository, lifecycleScope) }
@@ -133,19 +138,33 @@ class MainActivity : ComponentActivity() {
                 val failedCues = remember { mutableStateListOf<String>() }
                 val placeCue = settledPlace?.let(PlaceMusic::cueFor)?.takeIf { it.youtubeId !in failedCues }
                 var placeMusicPlaying by remember { mutableStateOf(false) }
+                val placeMusicMemory = remember { BackgroundMusicMemory() }
+                val homeMusicMemory = remember { BackgroundMusicMemory() }
                 val onPlace = { id: String -> heard = current to id }
 
                 // Outside the per-screen state so it plays on, uninterrupted, between those screens.
                 ShireBackgroundMusic(playing = current.hasShireMusic && !placeMusicPlaying)
                 val push = { screen: Screen -> backStack = backStack + screen }
                 Box(Modifier.fillMaxSize()) {
-                    // Underneath the (opaque) map: the player is only heard, never seen.
+                    // Underneath the (opaque) screen: the player is only heard, never seen.
                     if (current.hasPlaceMusic) {
-                        PlaceBackgroundMusic(
-                            video = placeCue,
+                        YouTubeBackgroundMusic(
+                            playlist = listOfNotNull(placeCue),
                             onPlaying = { placeMusicPlaying = it },
                             onFailed = { failedCues += it.youtubeId },
                             modifier = Modifier.fillMaxSize(),
+                            memory = placeMusicMemory,
+                        )
+                    }
+                    // The epic score on Home; the banner's trailers play muted under it.
+                    if (current == Screen.Home) {
+                        YouTubeBackgroundMusic(
+                            playlist = HomeMusic.playlist.filter { it.youtubeId !in failedCues },
+                            onPlaying = {},
+                            onFailed = { failedCues += it.youtubeId },
+                            modifier = Modifier.fillMaxSize(),
+                            volume = HOME_MUSIC_VOLUME,
+                            memory = homeMusicMemory,
                         )
                     }
                     // Keeps each screen's rememberSaveable state (e.g. the selected film) while it's

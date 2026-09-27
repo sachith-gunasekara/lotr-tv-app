@@ -85,12 +85,13 @@ private val TextShadow = Shadow(color = Color.Black.copy(alpha = 0.7f), offset =
 private const val YOUTUBE_START_TIMEOUT_MS = 20_000L
 
 /**
- * What the banner plays after resting a few seconds: a trailer from the drive (with sound), else
- * the official trailer from YouTube, else (offline, say) a muted loop of the title itself - for
- * films, starting on the very frame the still came from, so the picture simply comes alive.
+ * What the banner plays after resting a few seconds: a trailer from the drive, else the official
+ * trailer from YouTube, else (offline, say) a loop of the title itself - for films, starting on
+ * the very frame the still came from, so the picture simply comes alive. All muted: Home has its
+ * own score playing.
  */
 private sealed interface Preview {
-    data class File(val uri: Uri, val startMs: Long?, val withSound: Boolean, val loops: Boolean) : Preview
+    data class File(val uri: Uri, val startMs: Long?, val loops: Boolean) : Preview
     data class YouTube(val youtubeId: String) : Preview
 }
 
@@ -108,9 +109,9 @@ fun HeroBanner(
 ) {
     var youTubeFailed by remember(watchable.id) { mutableStateOf(false) }
     val preview = when {
-        trailer != null -> Preview.File(trailer.uri, startMs = 0, withSound = true, loops = false)
+        trailer != null -> Preview.File(trailer.uri, startMs = 0, loops = false)
         youTubeTrailerId != null && !youTubeFailed -> Preview.YouTube(youTubeTrailerId)
-        file != null -> Preview.File(file.uri, startMs = (watchable as? Film)?.backdropAtMs, withSound = false, loops = true)
+        file != null -> Preview.File(file.uri, startMs = (watchable as? Film)?.backdropAtMs, loops = true)
         else -> null
     }
     var previewStarted by remember(watchable.id, preview) { mutableStateOf(false) }
@@ -135,7 +136,7 @@ fun HeroBanner(
                     youtubeId = preview.youtubeId,
                     onFirstFrame = onFirstFrame,
                     onFinished = onFinished,
-                    // Offline or refused: the title's own muted loop takes over.
+                    // Offline or refused: the title's own loop takes over.
                     onFailed = { videoShowing = false; youTubeFailed = true },
                     modifier = previewModifier,
                 )
@@ -277,7 +278,7 @@ private fun AmbientPreview(
     val context = LocalContext.current
     val player = remember(preview) {
         ExoPlayer.Builder(context).build().apply {
-            volume = if (preview.withSound) 0.6f else 0f
+            volume = 0f
             setMediaItem(MediaItem.fromUri(preview.uri))
             prepare()
         }
@@ -368,7 +369,7 @@ private fun YouTubePreview(
             object : AbstractYouTubePlayerListener() {
                 override fun onReady(youTubePlayer: YouTubePlayer) {
                     player = youTubePlayer
-                    youTubePlayer.setVolume(60)
+                    youTubePlayer.mute()
                     youTubePlayer.loadVideo(youtubeId, 0f)
                 }
 

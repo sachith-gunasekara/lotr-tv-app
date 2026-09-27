@@ -29,7 +29,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** YouTube's volume (0-100); about as loud as the quiet Shire music. */
-private const val VOLUME = 35
+const val QUIET_VOLUME = 35
 private const val FADE_IN_MS = 2_500L
 private const val FADE_OUT_MS = 1_200L
 private const val TICK_MS = 50L
@@ -38,18 +38,29 @@ private const val TICK_MS = 50L
 private const val START_TIMEOUT_MS = 20_000L
 
 /**
- * A place's score cue from YouTube, quietly behind a map: crossfades to [video] when it changes,
- * loops it, fades out when it turns null or the app pauses, and picks each cue up where it left
- * off. [onPlaying] says when it's audible (the Shire music stays off meanwhile); [onFailed] when a
- * cue won't play (offline, or no longer embeddable). The player is laid out full size - compose it
- * underneath an opaque screen - and never takes focus.
+ * Where a [YouTubeBackgroundMusic] playlist has got to - which cue, and how far into each - held
+ * by whoever composes it, so the music carries on from there next time it's shown.
+ */
+class BackgroundMusicMemory {
+    internal var index by mutableIntStateOf(0)
+    internal val progress = mutableMapOf<String, Float>()
+}
+
+/**
+ * Score from YouTube behind a screen: plays [playlist] in turn and loops it (a single cue loops on
+ * its own), crossfades when it changes, fades out when it's emptied or the app pauses, and picks
+ * each cue up where it left off. [onPlaying] says when it's audible (so other music can stay off);
+ * [onFailed] when a cue won't play (offline, or no longer embeddable) - drop it from the playlist.
+ * The player is laid out full size - compose it underneath an opaque screen - and never takes focus.
  */
 @Composable
-fun PlaceBackgroundMusic(
-    video: YouTubeVideo?,
+fun YouTubeBackgroundMusic(
+    playlist: List<YouTubeVideo>,
     onPlaying: (Boolean) -> Unit,
     onFailed: (YouTubeVideo) -> Unit,
     modifier: Modifier = Modifier,
+    volume: Int = QUIET_VOLUME,
+    memory: BackgroundMusicMemory = remember { BackgroundMusicMemory() },
 ) {
     val context = LocalContext.current
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
@@ -61,10 +72,22 @@ fun PlaceBackgroundMusic(
     var state by remember { mutableStateOf(PlayerConstants.PlayerState.UNKNOWN) }
     var failed by remember { mutableStateOf(false) }
     // What's loaded, where it's got to, and how loud it is now (the player can't be asked).
-    val progress = remember { mutableMapOf<String, Float>() }
+    val progress = memory.progress
     var loadedId by remember { mutableStateOf<String?>(null) }
     var second by remember { mutableFloatStateOf(0f) }
-    var volume by remember { mutableIntStateOf(0) }
+    var level by remember { mutableIntStateOf(0) }
+    var index by memory::index
+    val video = playlist.getOrNull(index % playlist.size.coerceAtLeast(1))
+    val currentPlaylist by rememberUpdatedState(playlist)
+    // At the end of a cue: on to the next, or round again if it's the only one.
+    val onEnded = { youTubePlayer: YouTubePlayer ->
+        if (currentPlaylist.size > 1) {
+            index = (index + 1) % currentPlaylist.size
+        } else {
+            youTubePlayer.seekTo(0f)
+            youTubePlayer.play()
+        }
+    }
     // The listener's parameters shadow the state above.
     val setState = { s: PlayerConstants.PlayerState -> state = s }
     val setSecond = { s: Float -> second = s }
@@ -84,12 +107,8 @@ fun PlaceBackgroundMusic(
                     }
 
                     override fun onStateChange(youTubePlayer: YouTubePlayer, state: PlayerConstants.PlayerState) {
-                        // Each cue loops until the place changes.
-                        if (state == PlayerConstants.PlayerState.ENDED) {
-                            youTubePlayer.seekTo(0f)
-                            youTubePlayer.play()
-                        }
                         setState(state)
+                        if (state == PlayerConstants.PlayerState.ENDED) onEnded(youTubePlayer)
                     }
 
                     override fun onCurrentSecond(youTubePlayer: YouTubePlayer, second: Float) {
@@ -105,17 +124,18 @@ fun PlaceBackgroundMusic(
         }
     }
 
-    LaunchedEffect(player, video, active) {
+    LaunchedEffect(player, video, active, volume) {
         val p = player ?: return@LaunchedEffect
         val target = video?.takeIf { active }
         if (target == null) currentOnPlaying(false)
         if (target?.youtubeId == loadedId && state == PlayerConstants.PlayerState.PLAYING) {
-            fade(volume, VOLUME, FADE_IN_MS) { volume = it; p.setVolume(it) }
+            fade(level, volume, FADE_IN_MS) { level = it; p.setVolume(it) }
             return@LaunchedEffect
         }
-        // Out with the old cue...
-        fade(volume, 0, FADE_OUT_MS) { volume = it; p.setVolume(it) }
-        loadedId?.let { progress[it] = second }
+        // Out with the old cue (one that ended starts from the top next time)...
+        val ended = state == PlayerConstants.PlayerState.ENDED
+        fade(level, 0, if (ended) 0 else FADE_OUT_MS) { level = it; p.setVolume(it) }
+        loadedId?.let { progress[it] = if (ended) 0f else second }
         p.pause()
         if (target == null) return@LaunchedEffect
         // ...and in with the new, where it was left.
@@ -136,11 +156,12 @@ fun PlaceBackgroundMusic(
             return@LaunchedEffect
         }
         currentOnPlaying(true)
-        fade(0, VOLUME, FADE_IN_MS) { volume = it; p.setVolume(it) }
+        fade(0, volume, FADE_IN_MS) { level = it; p.setVolume(it) }
     }
 
     DisposableEffect(playerView) {
         onDispose {
+            loadedId?.let { progress[it] = second }
             currentOnPlaying(false)
             playerView.release()
         }
@@ -152,7 +173,7 @@ fun PlaceBackgroundMusic(
 /** Steps the volume from [from] to [to] over [durationMs]. */
 private suspend fun fade(from: Int, to: Int, durationMs: Long, set: (Int) -> Unit) {
     if (from == to) return
-    val steps = (durationMs / TICK_MS).toInt()
+    val steps = (durationMs / TICK_MS).toInt().coerceAtLeast(1)
     for (step in 1..steps) {
         set(from + (to - from) * step / steps)
         delay(TICK_MS)
