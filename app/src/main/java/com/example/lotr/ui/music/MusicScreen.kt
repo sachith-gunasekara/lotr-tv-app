@@ -62,6 +62,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.example.lotr.data.Ambience
 import com.example.lotr.data.FilmLibrary
 import com.example.lotr.data.FilmRepository
 import com.example.lotr.data.MusicAlbum
@@ -85,12 +86,16 @@ import com.example.lotr.ui.theme.LotrBackground
 import com.example.lotr.ui.theme.TileTwilight
 import kotlinx.coroutines.delay
 
-/** One card in Music: a theme of the score, or a track from the drive. */
+/** One card in Music: a theme of the score, an ambience to leave on, or a track from the drive. */
 private sealed interface MusicItem {
     val key: String
 
     data class Theme(val theme: ScoreTheme, val heardIn: List<MusicTrack>) : MusicItem {
         override val key get() = "theme_${theme.id}"
+    }
+
+    data class Ambient(val ambience: Ambience) : MusicItem {
+        override val key get() = "ambience_${ambience.id}"
     }
 
     data class Track(val track: MusicTrack, val album: MusicAlbum, val index: Int) : MusicItem {
@@ -136,6 +141,7 @@ fun MusicScreen(
                 },
                 items = ScoreThemes.themes.map { theme -> MusicItem.Theme(theme, allTracks.filter { theme.isHeardIn(it.title) }) },
             ),
+            MusicRow("Ambience", "Hours of music to leave playing - OK plays it online", ScoreThemes.ambience.map(MusicItem::Ambient)),
         ) + albums.map { album ->
             MusicRow(album.title, "${tracks(album.tracks.size)} on the drive", album.tracks.mapIndexed { i, t -> MusicItem.Track(t, album, i) })
         }
@@ -250,6 +256,7 @@ fun MusicScreen(
                                 ShelfCard(
                                     title = when (item) {
                                         is MusicItem.Theme -> item.theme.name
+                                        is MusicItem.Ambient -> item.ambience.name
                                         is MusicItem.Track -> item.track.title
                                     },
                                     width = 208,
@@ -257,6 +264,7 @@ fun MusicScreen(
                                         when (item) {
                                             is MusicItem.Theme ->
                                                 if (item.heardIn.isEmpty()) onPlayOnline(item.theme.listen) else playQueue(item.heardIn, 0)
+                                            is MusicItem.Ambient -> onPlayOnline(item.ambience.listen)
                                             is MusicItem.Track ->
                                                 if (current) { if (player.isPlaying) player.pause() else player.play() }
                                                 else playQueue(item.album.tracks, item.index)
@@ -265,6 +273,7 @@ fun MusicScreen(
                                     onLongClick = (item as? MusicItem.Theme)?.let { theme -> { onPlayOnline(theme.theme.listen) } },
                                     overline = when (item) {
                                         is MusicItem.Theme -> item.heardIn.size.takeIf { it > 0 }?.let { "in ${tracks(it)}" }
+                                        is MusicItem.Ambient -> formatLength(item.ambience.listen.lengthSeconds.toLong())
                                         is MusicItem.Track -> if (current) (if (isPlaying) "▶ playing" else "❚❚ paused") else item.track.trackNumber?.let { "track $it" }
                                     },
                                     modifier = Modifier
@@ -273,6 +282,7 @@ fun MusicScreen(
                                 ) {
                                     when (item) {
                                         is MusicItem.Theme -> GlyphPlaceholder(item.theme.glyph, TileTwilight)
+                                        is MusicItem.Ambient -> GlyphPlaceholder(item.ambience.glyph, TileTwilight)
                                         is MusicItem.Track -> {
                                             GlyphPlaceholder(item.track.trackNumber?.toString().orEmpty(), TileTwilight)
                                             rememberCover(item.track, music)?.let {
@@ -342,6 +352,7 @@ private fun rememberCover(track: MusicTrack, music: MusicRepository): ImageBitma
 @Composable
 private fun rememberBackdrop(item: MusicItem, music: MusicRepository): Painter? = when (item) {
     is MusicItem.Theme -> FilmRepository.films.firstOrNull { it.id == item.theme.filmId }?.let { painterResource(it.backdropRes()) }
+    is MusicItem.Ambient -> FilmRepository.films.firstOrNull { it.id == item.ambience.filmId }?.let { painterResource(it.backdropRes()) }
     is MusicItem.Track -> rememberCover(item.track, music)?.let(::BitmapPainter)
 }
 
@@ -360,6 +371,17 @@ private fun MusicDetails(item: MusicItem, isCurrent: Boolean, isPlaying: Boolean
                 } else {
                     "OK to play ${if (item.heardIn.size == 1) "the track" else "the ${item.heardIn.size} tracks"} it's in  ·  hold OK for the official recording"
                 },
+                modifier = modifier,
+            )
+        }
+        is MusicItem.Ambient -> {
+            val listen = item.ambience.listen
+            DetailsPanel(
+                overline = "Ambience  ·  ${listen.channel}",
+                title = item.ambience.name,
+                meta = "\"${listen.title}\"  ·  ${formatLength(listen.lengthSeconds.toLong())}",
+                body = item.ambience.about,
+                hint = "OK to play (online)",
                 modifier = modifier,
             )
         }
