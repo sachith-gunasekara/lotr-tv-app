@@ -29,7 +29,7 @@ LOTR/
 │   ├── Season 1/…Rings.of.Power.S01E01….mkv      (also: 1x01, "Episode 01", "01 - Title")
 │   └── Season 2/…
 ├── Trailers/                                        (optional)
-│   ├── Fellowship of the Ring trailer.mp4           played on the Home banner, with sound
+│   ├── Fellowship of the Ring trailer.mp4           played on the Home banner, muted under its score
 │   └── The Rings of Power trailer.mp4
 ├── Appendices/                                      (optional; also "Extras", "Bonus", …)
 │   └── Disc 1 - From Book to Vision/…mkv            shown first in Appendices

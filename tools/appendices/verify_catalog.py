@@ -2,7 +2,7 @@
 """
 Checks every video in app/src/main/assets/appendices/catalog.json is still on YouTube and
 embeddable (the app plays them in an embedded player), and that its recorded length matches.
-Also checks the background score cues in PlaceMusic.kt and HomeMusic.kt (reported, never fixed -
+Also checks the background score cues in PlaceMusic.kt (reported, never fixed -
 edit them by hand).
 
   python3 tools/appendices/verify_catalog.py          # report
@@ -14,7 +14,7 @@ import json, os, re, sys, time, urllib.error, urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CATALOG = os.path.join(ROOT, "app/src/main/assets/appendices/catalog.json")
-SCORE_FILES = [os.path.join(ROOT, f"app/src/main/java/com/example/lotr/data/{name}.kt") for name in ("PlaceMusic", "HomeMusic")]
+SCORE_FILES = [os.path.join(ROOT, f"app/src/main/java/com/example/lotr/data/{name}.kt") for name in ("PlaceMusic",)]
 HEADERS = {"User-Agent": "Mozilla/5.0", "Accept-Language": "en"}
 
 
