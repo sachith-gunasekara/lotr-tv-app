@@ -24,6 +24,7 @@ import com.example.lotr.data.MapTileRepository
 import com.example.lotr.data.MusicRepository
 import com.example.lotr.data.PlaceMusic
 import com.example.lotr.data.PlaybackPositionRepository
+import com.example.lotr.data.ShireMusic
 import com.example.lotr.data.StorageRepository
 import com.example.lotr.data.ThumbnailRepository
 import com.example.lotr.data.YouTubeVideo
@@ -31,7 +32,7 @@ import com.example.lotr.data.readableName
 import com.example.lotr.data.model.Watchable
 import com.example.lotr.ui.appendices.AppendicesScreen
 import com.example.lotr.ui.components.BackgroundMusicMemory
-import com.example.lotr.ui.components.ShireBackgroundMusic
+import com.example.lotr.ui.components.BundledBackgroundMusic
 import com.example.lotr.ui.components.YouTubeBackgroundMusic
 import com.example.lotr.ui.home.HomeDestination
 import com.example.lotr.ui.library.LibraryScreen
@@ -91,8 +92,11 @@ private val Screen.hasPlaceMusic: Boolean
 /** How long a place must stay in view before its music takes over, so panning past doesn't flick between cues. */
 private const val PLACE_SETTLE_MS = 1_500L
 
-/** The Home score's YouTube volume (0-100): a little fuller than the quiet map music. */
-private const val HOME_MUSIC_VOLUME = 45
+/** The quiet Shire music's volume; each track's loudness-matched gain scales it. */
+private const val SHIRE_MUSIC_VOLUME = 0.45f
+
+/** The Home score's volume: a little fuller than the quiet Shire music. */
+private const val HOME_MUSIC_VOLUME = 0.6f
 
 class MainActivity : ComponentActivity() {
     private val storageRepository by lazy { StorageRepository(applicationContext) }
@@ -139,11 +143,21 @@ class MainActivity : ComponentActivity() {
                 val placeCue = settledPlace?.let(PlaceMusic::cueFor)?.takeIf { it.youtubeId !in failedCues }
                 var placeMusicPlaying by remember { mutableStateOf(false) }
                 val placeMusicMemory = remember { BackgroundMusicMemory() }
-                val homeMusicMemory = remember { BackgroundMusicMemory() }
                 val onPlace = { id: String -> heard = current to id }
 
                 // Outside the per-screen state so it plays on, uninterrupted, between those screens.
-                ShireBackgroundMusic(playing = current.hasShireMusic && !placeMusicPlaying)
+                BundledBackgroundMusic(
+                    tracks = ShireMusic.order,
+                    playing = current.hasShireMusic && !placeMusicPlaying,
+                    volume = SHIRE_MUSIC_VOLUME,
+                )
+                // The epic score on Home, from the moment the app opens; the banner's trailers play
+                // muted under it. It picks up where it left off on coming back.
+                BundledBackgroundMusic(
+                    tracks = HomeMusic.playlist,
+                    playing = current == Screen.Home,
+                    volume = HOME_MUSIC_VOLUME,
+                )
                 val push = { screen: Screen -> backStack = backStack + screen }
                 Box(Modifier.fillMaxSize()) {
                     // Underneath the (opaque) screen: the player is only heard, never seen.
@@ -154,17 +168,6 @@ class MainActivity : ComponentActivity() {
                             onFailed = { failedCues += it.youtubeId },
                             modifier = Modifier.fillMaxSize(),
                             memory = placeMusicMemory,
-                        )
-                    }
-                    // The epic score on Home; the banner's trailers play muted under it.
-                    if (current == Screen.Home) {
-                        YouTubeBackgroundMusic(
-                            playlist = HomeMusic.playlist.filter { it.youtubeId !in failedCues },
-                            onPlaying = {},
-                            onFailed = { failedCues += it.youtubeId },
-                            modifier = Modifier.fillMaxSize(),
-                            volume = HOME_MUSIC_VOLUME,
-                            memory = homeMusicMemory,
                         )
                     }
                     // Keeps each screen's rememberSaveable state (e.g. the selected film) while it's
